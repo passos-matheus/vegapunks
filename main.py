@@ -93,7 +93,7 @@ async def echo_mode_pipeline(stop_flag, audio_input_queue, audio_output_queue):
 
             print('tocando')
             
-            await audio_output_queue.put(speech_segment.tobytes)
+            await audio_output_queue.put(speech_segment.tobytes())
             
             print('transcrevendo')
 
