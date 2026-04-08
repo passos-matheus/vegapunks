@@ -1,0 +1,20 @@
+próxima questão :4.0
+próxima :4.0
+repetir questão :4.0
+repetir :4.0
+encerrar revisão :4.0
+encerrar :4.0
+parar revisão :4.0
+parar :4.0
+pix :4.0
+
+
+
+
+
+
+
+
+
+
+
