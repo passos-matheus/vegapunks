@@ -15,6 +15,12 @@ frames_amount = 1024
 
 
  
+def normalize_to_float_array(audio_bytes):
+    return np.frombuffer(audio_bytes, dtype=np.float32)
+
+def normalize_to_bytes(speech_segment):
+    return speech_segment.tobytes()
+
 
 async def _clean(
         stop_flag: threading.Event,
