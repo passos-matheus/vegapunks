@@ -12,7 +12,7 @@ frames_amount = 1024
 from modules.workers.audio_workers import audio_consumer_worker, audio_producer_worker
 from modules.stt import create_voice_detection_model, create_transcription_model, transcribe_speech_segment, extract_speech_segment
 from modules.audio import normalize_to_bytes, normalize_to_float_array
-
+from modules.tts import create_speech_synthesis_model, sintetize_speech_segment
 
 
 
@@ -70,10 +70,10 @@ async def echo_mode_pipeline(stop_flag, audio_input_queue, audio_output_queue):
     total_samples_fed = 0
     audio_history = deque()
     
-
+    
     transcription_model = create_transcription_model()
     voice_detection_model = create_voice_detection_model()
-
+    speech_synthesis_model = create_speech_synthesis_model()
 
     while not stop_flag.is_set():
 
@@ -103,6 +103,13 @@ async def echo_mode_pipeline(stop_flag, audio_input_queue, audio_output_queue):
             )
 
             print(transcription)
+
+            print('sintetizandoo')
+
+            float_32_audio_samples = sintetize_speech_segment(speech_synthesis_model, transcription)
+            
+            print('tocandooo')
+            await audio_output_queue.put(float_32_audio_samples.tobytes())
 
 
         except:
