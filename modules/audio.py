@@ -1,3 +1,4 @@
+import numpy as np
 import pyaudio
 import asyncio
 import threading
@@ -11,6 +12,9 @@ channels = 1
 rate = 16000
 frames_amount = 1024
 
+
+
+ 
 
 async def _clean(
         stop_flag: threading.Event,

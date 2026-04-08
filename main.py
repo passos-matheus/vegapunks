@@ -7,8 +7,6 @@ import pyaudio
 from modules.audio import capture_audio_input_and_produce_audio_output
 
 
-    
-
 
 async def main():
 
