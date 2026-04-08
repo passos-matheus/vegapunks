@@ -3,11 +3,14 @@ import collections
 import numpy as np
 
 
-from modules.stt import create_voice_detection_model
+from modules.stt import create_voice_detection_model, create_transcription_model, transcribe_speech_segment
 
 
-def audio_consumer_worker(stop_flag, frames_amount, _input_stream,  _output_queue, loop):
+def audio_consumer_worker(stop_flag, frames_amount, _input_stream,  _output_queue, loop, mode: str = 'default'):
     vad = create_voice_detection_model()	
+
+    transcriptor = create_transcription_model()
+
 
     pre_buffer = collections.deque(maxlen=10) 
 
@@ -28,16 +31,32 @@ def audio_consumer_worker(stop_flag, frames_amount, _input_stream,  _output_queu
                 full_segment = np.concatenate([prefix, np.array(segment.samples, dtype=np.float32)])
 
                 pre_buffer.clear()
-                
+                             
+            
                 normalized_speech_segment = normalize_to_bytes(full_segment)
+
+                print('tocando')
                 asyncio.run_coroutine_threadsafe(_output_queue.put(normalized_speech_segment), loop)
+                
+                print('transcrevendo')
+
+                transcription = transcribe_speech_segment(
+                    speech_segment_samples=full_segment, 
+                    transcription_model=transcriptor
+                )
+
+                print(transcription)
+
+                continue
+
+
 
 
         except OSError:
             print('stream de input cancelado manualmente')
             break            
 
-async def audio_producer_worker(stop_flag, _input_queue, output_stream):
+async def audio_producer_worker(stop_flag, _input_queue, output_stream, mode: str = 'default'):
     
     while not stop_flag.is_set():
         try:        

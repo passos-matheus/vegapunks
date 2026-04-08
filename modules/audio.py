@@ -85,7 +85,7 @@ async def capture_audio_input_and_produce_audio_output(mode: Optional[str] = 'de
         audio_producer_task = asyncio.create_task(
                     audio_producer_worker(
                         stop_audio_workers_flag, 
-                        stream_consumed_audio_output_queue if mode == 'echo' else producer_audio_input_queue,
+                        stream_consumed_audio_output_queue if mode == 'echo_vad' else producer_audio_input_queue,
                         producer_audio_output_stream,
                     )
                 )

@@ -53,11 +53,13 @@ def create_voice_detection_model():
 
 
 def transcribe_speech_segment(transcription_model, speech_segment_samples):
-
+    print('entrou aqui')
     stream  = transcription_model.create_stream()
+    
+    print('entrou aqui')
     stream.accept_waveform(SAMPLE_RATE, speech_segment_samples)
-
-    transcription_model.decode_stream(s)
-
+    print('entrou aqui')
+    transcription_model.decode_stream(stream)
+    print('entrou aqui')
     return stream.result.text.strip()
 
