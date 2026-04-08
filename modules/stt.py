@@ -1,3 +1,6 @@
+from collections import deque
+
+import numpy as np
 import sherpa_onnx
 
 from pathlib import Path
@@ -32,8 +35,8 @@ def create_transcription_model():
         bpe_vocab=f"{ASR_MODEL_DIR}/bpe.vocab",
         num_threads=2,
         decoding_method="modified_beam_search",
-        hotwords_file=HOTWORDS_FILE,
-        hotwords_score=4.0,
+        # hotwords_file=HOTWORDS_FILE,
+        # hotwords_score=4.0,
     )
 
 
@@ -52,14 +55,76 @@ def create_voice_detection_model():
 	return sherpa_onnx.VoiceActivityDetector(c, buffer_size_in_seconds=30)
 
 
-def transcribe_speech_segment(transcription_model, speech_segment_samples):
-    print('entrou aqui')
-    stream  = transcription_model.create_stream()
-    
-    print('entrou aqui')
-    stream.accept_waveform(SAMPLE_RATE, speech_segment_samples)
-    print('entrou aqui')
-    transcription_model.decode_stream(stream)
-    print('entrou aqui')
+def transcribe_speech_segment(transcription_model, speech_segment_samples):                                                                                                                                                                                                                                                                   
+    seg = speech_segment_samples           
+
+    print(f'speech de entrada: len={len(seg)}, dur={len(seg)/16000:.2f}s, min={seg.min():.4f}, max={seg.max():.4f}, dtype={seg.dtype}')            
+
+    stream = transcription_model.create_stream()                                                                                                                                                                                                                                                                                              
+    stream.accept_waveform(SAMPLE_RATE, speech_segment_samples)                                                                                                                                                                                                                                                                               
+    transcription_model.decode_stream(stream)                                                                                                                                                                                                                                                                                                 
     return stream.result.text.strip()
 
+
+
+def extract_speech_segment(audio_history, total_samples_fed, voice_detection_model, speech_segment_samples):    
+    full_segment = None
+    
+    HISTORY_SECONDS = 30   
+    PADDING_SECONDS = 0.32
+    PADDING_SAMPLES = int(PADDING_SECONDS * SAMPLE_RATE)
+    
+    chunk_start = total_samples_fed
+    audio_history.append((chunk_start, speech_segment_samples))
+    total_samples_fed += len(speech_segment_samples)
+
+
+    cutoff = total_samples_fed - int(HISTORY_SECONDS * SAMPLE_RATE)
+
+    while audio_history:
+
+        oldest_start, oldest_samples = audio_history[0]
+
+        if oldest_start + len(oldest_samples) < cutoff:
+            audio_history.popleft()
+        else:
+            break
+
+    voice_detection_model.accept_waveform(speech_segment_samples)
+
+    while not voice_detection_model.empty():
+        
+        segment = voice_detection_model.front                                                                                                                                                                                                                                                                                                         
+        speech = np.array(segment.samples, dtype=np.float32)                                                                                                                                                                                                                                                                        
+        seg_start = segment.start         
+
+        voice_detection_model.pop()                           
+
+        padding_start = max(0, seg_start - PADDING_SAMPLES)
+
+        padding_chunks = []
+        for (cs, cs_samples) in audio_history:
+
+            ce = cs + len(cs_samples)
+            
+            overlap_begin = max(cs, padding_start)
+            overlap_end = min(ce, seg_start)
+
+            if overlap_begin < overlap_end:
+            
+                local_begin = overlap_begin - cs
+                local_end = overlap_end - cs
+            
+                padding_chunks.append(cs_samples[local_begin:local_end])
+
+        if padding_chunks:
+
+            prefix = np.concatenate(padding_chunks)
+            full_segment = np.concatenate([prefix, speech])
+            
+        else:
+            full_segment = speech
+            
+        return full_segment, total_samples_fed
+
+    return full_segment, total_samples_fed

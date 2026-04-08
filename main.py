@@ -10,7 +10,7 @@ import numpy as np
 frames_amount = 1024
 
 from modules.workers.audio_workers import audio_consumer_worker, audio_producer_worker
-from modules.stt import create_voice_detection_model, create_transcription_model, transcribe_speech_segment
+from modules.stt import create_voice_detection_model, create_transcription_model, transcribe_speech_segment, extract_speech_segment
 from modules.audio import normalize_to_bytes, normalize_to_float_array
 
 
@@ -67,10 +67,13 @@ async def run_in_echo_mode():
         audio_producer_task.cancel()
 
 async def echo_mode_pipeline(stop_flag, audio_input_queue, audio_output_queue):
+    total_samples_fed = 0
+    audio_history = deque()
+    
+
     transcription_model = create_transcription_model()
     voice_detection_model = create_voice_detection_model()
 
-    pre_speech_detected_buffer = deque(maxlen=10)
 
     while not stop_flag.is_set():
 
@@ -78,35 +81,30 @@ async def echo_mode_pipeline(stop_flag, audio_input_queue, audio_output_queue):
             audio_bytes = await audio_input_queue.get()
             normalized_to_float_array = normalize_to_float_array(audio_bytes)
 
-            pre_speech_detected_buffer.append(normalized_to_float_array)
-            voice_detection_model.accept_waveform(normalized_to_float_array)
+            speech_segment, total_samples_fed = extract_speech_segment(
+                audio_history=audio_history,
+                total_samples_fed=total_samples_fed,
+                voice_detection_model=voice_detection_model, 
+                speech_segment_samples=normalized_to_float_array
+            )
 
-            while not voice_detection_model.empty():
-
-                segment = voice_detection_model.front
-                voice_detection_model.pop()
-             
-                prefix = np.concatenate(list(pre_speech_detected_buffer))
-                full_segment = np.concatenate([prefix, np.array(segment.samples, dtype=np.float32)])
-
-                pre_speech_detected_buffer.clear()
-                             
-                normalized_speech_segment = normalize_to_bytes(full_segment)
-
-                print('tocando')
-                
-                await audio_output_queue.put(normalized_speech_segment)
-                
-                print('transcrevendo')
-
-                transcription = transcribe_speech_segment(
-                    speech_segment_samples=full_segment, 
-                    transcription_model=transcription_model
-                )
-
-                print(transcription)
-
+            if speech_segment is None:
                 continue
+
+            print('tocando')
+            
+            await audio_output_queue.put(speech_segment.tobytes)
+            
+            print('transcrevendo')
+
+            transcription = transcribe_speech_segment(
+                speech_segment_samples=speech_segment, 
+                transcription_model=transcription_model
+            )
+
+            print(transcription)
+
+
         except:
             raise
     
