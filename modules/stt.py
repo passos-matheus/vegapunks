@@ -43,7 +43,7 @@ def create_voice_detection_model():
 	c.silero_vad.model = VAD_MODEL
 
 	c.silero_vad.threshold = 0.5
-	c.silero_vad.min_silence_duration = 0.25
+	c.silero_vad.min_silence_duration = 0.4
 	c.silero_vad.min_speech_duration = 0.20
 	c.silero_vad.window_size = CHUNK_SIZE
 	c.sample_rate = SAMPLE_RATE
