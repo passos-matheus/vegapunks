@@ -14,7 +14,7 @@ from modules.stt import create_voice_detection_model, create_transcription_model
 from modules.audio import normalize_to_bytes, normalize_to_float_array
 from modules.tts import create_speech_synthesis_model, sintetize_speech_segment
 
-
+from modules.wakeword import create_wakeword_model, detect_wakeword_in_speech_segment
 
 async def main():
     mode = os.getenv('PIPELINE_MODE', 'echo')
@@ -67,10 +67,12 @@ async def run_in_echo_mode():
         audio_producer_task.cancel()
 
 async def echo_mode_pipeline(stop_flag, audio_input_queue, audio_output_queue):
+    is_wakeword_said = False
+
     total_samples_fed = 0
     audio_history = deque()
     
-    
+    wakeword_model = create_wakeword_model()
     transcription_model = create_transcription_model()
     voice_detection_model = create_voice_detection_model()
     speech_synthesis_model = create_speech_synthesis_model()
@@ -94,22 +96,32 @@ async def echo_mode_pipeline(stop_flag, audio_input_queue, audio_output_queue):
             print('tocando')
             
             await audio_output_queue.put(speech_segment.tobytes())
+
+            print('testando se ativa o wakeword')
+
+            is_waked = detect_wakeword_in_speech_segment(wakeword_model, speech_segment)
+
+            if is_waked:
+                print(f'resultado do wakeword: {is_waked}')
+                is_wakeword_said = not is_wakeword_said
+
             
-            print('transcrevendo')
+            if is_wakeword_said:
+                print('transcrevendo')
 
-            transcription = transcribe_speech_segment(
-                speech_segment_samples=speech_segment, 
-                transcription_model=transcription_model
-            )
+                transcription = transcribe_speech_segment(
+                    speech_segment_samples=speech_segment, 
+                    transcription_model=transcription_model
+                )
 
-            print(transcription)
+                print(transcription)
 
-            print('sintetizandoo')
+                print('sintetizandoo')
 
-            float_32_audio_samples = sintetize_speech_segment(speech_synthesis_model, transcription)
-            
-            print('tocandooo')
-            await audio_output_queue.put(float_32_audio_samples.tobytes())
+                float_32_audio_samples = sintetize_speech_segment(speech_synthesis_model, transcription)
+                
+                print('tocandooo')
+                await audio_output_queue.put(float_32_audio_samples.tobytes())
 
 
         except:
