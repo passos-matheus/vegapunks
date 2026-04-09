@@ -22,14 +22,10 @@ messages = [
     {'role': 'system', 'content': 'Você é um assistente que só fala português brasileiro, siga a instruções corretamente.'}
 ]
 
-messages.append(create_user_message('Diga exatamente "Teste."'))
-
-teste = slm.create_chat_completion(messages=messages, max_tokens=100, stream=False)
-print(f'teste do slm: {teste}')
 
 
 
-def active_adapter(ctx, target_adapter, name_pointer_tuple_list, adapters, scales):
+def active_adapter(ctx, target_adapter, name_pointer_tuple_list, adapters, scales, personalized_scale = 1.0):
     _count = len(scales)
     actived_adapter = None
 
@@ -38,7 +34,7 @@ def active_adapter(ctx, target_adapter, name_pointer_tuple_list, adapters, scale
     for i in range(0, _count):
         if target_adapter == name_pointer_tuple_list[i][0]:
             actived_adapter = target_adapter
-            scales[i] = 1.0
+            scales[i] = personalized_scale
 
             continue 
         
@@ -98,18 +94,51 @@ adapters_pointer_python_list = [
 
 adapters_pointers_c_array, scales_c_float_array =_initialize_adapters(slm.ctx, adapters_pointer_python_list)
 
-actived_adapter, current_actived_adapter_scale = active_adapter(slm.ctx, 'adapter_a', adapters_pointer_python_list, adapters_pointers_c_array, scales_c_float_array)
+actived_adapter, current_actived_adapter_scale = active_adapter(slm.ctx, 'adapter_a', adapters_pointer_python_list, adapters_pointers_c_array, scales_c_float_array, personalized_scale=0.5)
 print(f'adapter ativo: {actived_adapter}, scale: {current_actived_adapter_scale}')
 
-actived_adapter, current_actived_adapter_scale = active_adapter(slm.ctx, 'adapter_b', adapters_pointer_python_list, adapters_pointers_c_array, scales_c_float_array)
+messages.append(create_user_message('Preciso marcar uma call dez horas"'))
+
+test_inference_with_adapter = slm.create_chat_completion(messages=messages, max_tokens=100, stream=False)
+print(f'teste da inferência com o {active_adapter}, com scale {current_actived_adapter_scale}, resultado:{test_inference_with_adapter}')
+
+messages.pop()
+slm.reset()
+
+
+actived_adapter, current_actived_adapter_scale = active_adapter(slm.ctx, 'adapter_b', adapters_pointer_python_list, adapters_pointers_c_array, scales_c_float_array, personalized_scale=0.1)
 print(f'adapter ativo: {actived_adapter}, scale: {current_actived_adapter_scale}')
 
-actived_adapter, current_actived_adapter_scale = active_adapter(slm.ctx, 'adapter_c', adapters_pointer_python_list, adapters_pointers_c_array, scales_c_float_array)
+messages.append(create_user_message('Preciso marcar uma call dez horas"'))
+
+test_inference_with_adapter = slm.create_chat_completion(messages=messages, max_tokens=100, stream=False)
+print(f'teste da inferência com o {active_adapter}, com scale {current_actived_adapter_scale}, resultado:{test_inference_with_adapter}')
+
+messages.pop()
+slm.reset()
+
+
+actived_adapter, current_actived_adapter_scale = active_adapter(slm.ctx, 'adapter_c', adapters_pointer_python_list, adapters_pointers_c_array, scales_c_float_array, personalized_scale=1.0)
 print(f'adapter ativo: {actived_adapter}, scale: {current_actived_adapter_scale}')
 
-actived_adapter, current_actived_adapter_scale =active_adapter(slm.ctx, 'adapter_a', adapters_pointer_python_list, adapters_pointers_c_array, scales_c_float_array)
+messages.append(create_user_message('Preciso marcar uma call dez horas"'))
+
+test_inference_with_adapter = slm.create_chat_completion(messages=messages, max_tokens=100, stream=False)
+print(f'teste da inferência com o {active_adapter}, com scale {current_actived_adapter_scale}, resultado:{test_inference_with_adapter}')
+
+messages.pop()
+slm.reset()
+
+actived_adapter, current_actived_adapter_scale =active_adapter(slm.ctx, 'adapter_a', adapters_pointer_python_list, adapters_pointers_c_array, scales_c_float_array, personalized_scale=0.7)
 print(f'adapter ativo: {actived_adapter}, scale: {current_actived_adapter_scale}')
 
+messages.append(create_user_message('Preciso marcar uma call dez horas"'))
+
+test_inference_with_adapter = slm.create_chat_completion(messages=messages, max_tokens=100, stream=False)
+print(f'teste da inferência com o {active_adapter}, com scale {current_actived_adapter_scale}, resultado:{test_inference_with_adapter}')
+
+messages.pop()
+slm.reset()
 
 
 
