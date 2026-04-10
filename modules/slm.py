@@ -68,15 +68,15 @@ def process_tool(initial_buffer: str, remaining_chunks):
     return None, extra_raw
 
 
-def process_generate(initial_buffer: str, remaining_chunks):
+def process_generate(initial_buffer: str, remaining_chunks, on_sentence=print):
     extra_raw = ""
 
     buffer = initial_buffer
- 
+
     for chunk in remaining_chunks:
-        
+
         delta = chunk['choices'][0]['delta']
-        
+
         if 'content' in delta and delta['content']:
             token = delta['content']
             extra_raw += token
@@ -85,12 +85,11 @@ def process_generate(initial_buffer: str, remaining_chunks):
             match = re.search(r'.*[,\.!\?\;:\n]', buffer)
 
             if match:
-
-                print(match.group())
+                on_sentence(match.group())
                 buffer = buffer[match.end():]
 
     if buffer:
-        print(buffer)
+        on_sentence(buffer)
 
     full_text = initial_buffer + extra_raw
     return full_text, extra_raw

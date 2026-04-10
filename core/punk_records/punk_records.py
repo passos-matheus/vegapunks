@@ -1,3 +1,5 @@
+import asyncio
+
 from typing import List
 from llama_cpp import Llama, LlamaState
 
@@ -167,7 +169,24 @@ def start_punk_records(model: Llama, adapters_path: str):
     return punk_records
 
 
-def consult_satellite(punk_records: PunkRecords, user_message: str):
+def _format_tool_feedback(template, tool_args, result=None):
+    format_args = {**tool_args}
+    if result is not None:
+        format_args['result'] = result
+    return template.format(**format_args)
+
+def _send_to_tts(text, output_queue, loop):
+    if output_queue is not None and loop is not None:
+        asyncio.run_coroutine_threadsafe(output_queue.put(text), loop)
+    else:
+        print(text)
+ 
+
+def consult_satellite(punk_records: PunkRecords, user_message: str, output_queue=None, loop=None):
+
+    if output_queue is None or loop is None:
+        raise Exception('output queue ou loop n enviado!')
+
     model = punk_records.model
     target = punk_records.satellites[punk_records.current_active]
 
@@ -213,10 +232,29 @@ def consult_satellite(punk_records: PunkRecords, user_message: str):
             tool_data, extra_raw = process_tool(after_think, chunks)
             raw += extra_raw
             target.memory.messages.append({'role': 'assistant', 'content': raw})
+
+            if tool_data is not None:
+                tool_name = tool_data['name']
+                tool_args = tool_data['arguments']
+                tool_exec = target.skills.tools_exec.get(tool_name)
+
+                if tool_exec:
+                    before_text = _format_tool_feedback(tool_exec['before'], tool_args)
+                    _send_to_tts(before_text, output_queue, loop)
+
+                    result = tool_exec['fn'](tool_args)
+
+                    after_text = _format_tool_feedback(tool_exec['after'], tool_args, result=result)
+                    _send_to_tts(after_text, output_queue, loop)
+
+                    target.memory.messages.append({'role': 'tool', 'content': str(result)})
+                else:
+                    print(f'[warning] tool {tool_name} não encontrada em tools_exec')
+
             return 'tool_call', tool_data
 
         else:
-            _, extra_raw = process_generate(stripped, chunks)
+            _, extra_raw = process_generate(stripped, chunks, on_sentence=lambda text: _send_to_tts(text, output_queue, loop))
             raw += extra_raw
             cleaned = (after_think + extra_raw).strip()
             target.memory.messages.append({'role': 'assistant', 'content': raw})
