@@ -1,16 +1,9 @@
 import ctypes 
-import _ctypes
+ 
+import json
 from pathlib import Path
- 
- 
-
-import llama_cpp
-from llama_cpp import llama_set_adapters_lora, llama_adapter_lora_init
-
-def create_user_message(message: str):
-    
-
-    return {'role': 'user', 'content': message + '/no_think'}
+import re 
+from llama_cpp import llama_set_adapters_lora, llama_adapter_lora_init, Llama
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -19,19 +12,88 @@ MODEL_DIR = str(BASE_DIR / "core/models/slm/qwen-3-0.6B")
 ADAPTERS_DIR = f"{MODEL_DIR}/lora_adapters"
 MODEL_PATH = f"{MODEL_DIR}/Qwen3-0.6B-Q8_0.gguf"
 
-messages = [
-    {'role': 'system', 'content': 'Você é um assistente que só fala português brasileiro, siga a instruções corretamente.'}
-]
-
-
-
+ 
 def create_generation_model(path: str = MODEL_PATH, n_ctx: int = 2048):
-    
-    return llama_cpp.Llama(
+    return Llama(
     model_path=path,
     n_ctx=n_ctx,
     verbose=False,
 )
+
+def generate(messages: list, model: Llama, strean: bool = True):
+    return model.create_chat_completion(messages=messages, stream=strean, max_tokens=256)
+
+def process_think(raw: str):
+
+    _, think_and_rest = raw.split('<think>', 1) if '<think>' in raw else ('', raw)    
+
+    think_content, after_think = think_and_rest.split('</think>', 1) if '</think>' in think_and_rest else (think_and_rest, '')
+    think_content = think_content.strip()
+
+    if think_content:
+        print(f'aaaaaaaaaa modelo não desativou o thinking: {think_content}')
+
+    return think_content, after_think
+
+
+# podia ser um if, mas vou deixar aqui caso eu mude a lógca mais pra frente.
+def identify_mode(first_content: str):
+    return 'tool' if first_content.startswith('<') else 'text'
+
+
+
+def process_tool(initial_buffer: str, remaining_chunks):
+    extra_raw = ""
+    
+    buffer = initial_buffer
+
+    for chunk in remaining_chunks:
+        delta = chunk['choices'][0]['delta']
+        print(delta)
+
+        if 'content' in delta and delta['content']:
+            extra_raw += delta['content']
+            buffer += delta['content']
+
+    cleaned = buffer.strip()
+    tool_match = re.search(r'<tool_call>\s*(.*?)\s*</tool_call>', cleaned, re.DOTALL)
+
+    if tool_match:
+        tool_data = json.loads(tool_match.group(1))
+        print(f'[tool_call]: {tool_data}')
+        return tool_data, extra_raw
+
+    print(f'detectou modo tool mas não encontrou <tool_call>: {cleaned}')
+    
+    return None, extra_raw
+
+
+def process_generate(initial_buffer: str, remaining_chunks):
+    extra_raw = ""
+
+    buffer = initial_buffer
+ 
+    for chunk in remaining_chunks:
+        
+        delta = chunk['choices'][0]['delta']
+        
+        if 'content' in delta and delta['content']:
+            token = delta['content']
+            extra_raw += token
+            buffer += token
+
+            match = re.search(r'.*[,\.!\?\;:\n]', buffer)
+
+            if match:
+
+                print(match.group())
+                buffer = buffer[match.end():]
+
+    if buffer:
+        print(buffer)
+
+    full_text = initial_buffer + extra_raw
+    return full_text, extra_raw
 
 
 def desactive_adapters(ctx, name_pointer_tuple_list, adapters, scales):
@@ -50,7 +112,6 @@ def desactive_adapters(ctx, name_pointer_tuple_list, adapters, scales):
     print(f'Desativandos adapters: {desactived_adapters}.')
     return desactived_adapters, scales
 
- 
 
 def active_adapter(ctx, target_adapter, name_pointer_tuple_list, adapters, scales, personalized_scale = 1.0):
     _count = len(scales)
@@ -110,79 +171,9 @@ def load_adapter_in_memory(model, adapter_path, adapter_name):
 def _create_pure_C_array(_type, size):
     return _type * size
 
+def create_user_message(message: str):
+    return {'role': 'user', 'content': message + '/no_think'}
 
-#    
-#  
-# 
-# # adapter_a = _load_adapter_in_memory(slm.model, f'{ADAPTERS_DIR}/adapter_v8/adapter_v8.gguf', 'planner')
-# adapter_b = _load_adapter_in_memory(slm.model, f'{ADAPTERS_DIR}/adapter_b/adapter_b.gguf', 'cópia do planner 1')
-# adapter_c = _load_adapter_in_memory(slm.model, f'{ADAPTERS_DIR}/adapter_c/adapter_c.gguf', 'cópia do planner 2')
-# 
-# 
-# adapters_pointer_python_list = [
-#     ('adapter_a', adapter_a), 
-#     ('adapter_b', adapter_b), 
-#     ('adapter_c', adapter_c)
-# ]
-# 
-# 
-# _init_state = slm.save_state()
-# 
-# kv_cache_adapters = {
-#     'adapter_a': {
-#         'state': _init_state,
-#         'messages': [{'role': 'system', 'content': 'Você é um assistente que só fala português brasileiro, siga a instruções corretamente.'}]
-#     },
-#     'adapter_b': {
-#         'state': _init_state,
-#         'messages': [{'role': 'system', 'content': 'Você é um assistente que só fala português brasileiro, siga a instruções corretamente.'}]
-#     },
-#     'adapter_c': {
-#         'state': _init_state,
-#         'messages': [{'role': 'system', 'content': 'Você é um assistente que só fala português brasileiro, siga a instruções corretamente.'}]
-#     },
-# }
-# 
-# adapters_pointers_c_array, scales_c_float_array =_initialize_adapters(slm.ctx, adapters_pointer_python_list)
-# 
-# actived_adapter, current_actived_adapter_scale = active_adapter(slm.ctx, 'adapter_a', adapters_pointer_python_list, adapters_pointers_c_array, scales_c_float_array, personalized_scale=1.0)
-# print(f'adapter ativo: {actived_adapter}, scale: {current_actived_adapter_scale}')
-# 
-# kv_cache_adapters['adapter_a']['messages'].append(create_user_message('Qual a capital de minas gerais?'))
-# 
-# test_inference_with_adapter = slm.create_chat_completion(messages=kv_cache_adapters['adapter_a']['messages'], max_tokens=100, stream=False)
-# 
-# print(f'teste da inferência com o {active_adapter}, com scale {current_actived_adapter_scale}, resultado:{test_inference_with_adapter}')
-# 
-# kv_cache_adapters['adapter_a']['state'] = slm.save_state()
-# 
-# print(_init_state.n_tokens)
-# print(kv_cache_adapters['adapter_a']['state'].n_tokens)
-# 
-# slm.reset()
-#  
-# 
-# 
-# print(kv_cache_adapters['adapter_a']['state'].n_tokens)
-# slm.load_state(kv_cache_adapters['adapter_a']['state'])
-# actived_adapter, current_actived_adapter_scale = active_adapter(slm.ctx, 'adapter_a', adapters_pointer_python_list, adapters_pointers_c_array, scales_c_float_array, personalized_scale=1.0)
-# print(f'adapter ativo: {actived_adapter}, scale: {current_actived_adapter_scale}')
-# 
-# kv_cache_adapters['adapter_a']['messages'].append(create_user_message('diga apenas exatamente o nome do estado e repita exatamente a minha última pergunta'))
-# 
-# test_inference_with_adapter = slm.create_chat_completion(messages=kv_cache_adapters['adapter_a']['messages'], max_tokens=100, stream=False)
-# 
-# print(f'teste da inferência com o {active_adapter}, com scale {current_actived_adapter_scale}, resultado:{test_inference_with_adapter}')
-# 
-# kv_cache_adapters['adapter_a']['state'] = slm.save_state()
-# 
-# 
-# print(kv_cache_adapters['adapter_a']['state'].n_tokens)
-# 
-# slm.reset()
-#  
-#  
-#     
-# 
-#  
-# 
+def create_system_message(message: str):
+    return {'role': 'system', 'content': message}
+

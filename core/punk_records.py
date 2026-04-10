@@ -1,19 +1,23 @@
 
+import re
+import json
 
-from dataclasses import dataclass
+ 
 from pathlib import Path
 from typing import Any, List
-
+from dataclasses import dataclass
+from core.satellites import vegapunks
 from llama_cpp import Llama, LlamaState
-
-from modules.slm import create_generation_model, load_adapter_in_memory, initialize_adapters, active_adapter, desactive_adapters
-
+from modules.slm import create_user_message, identify_mode, load_adapter_in_memory, initialize_adapters, active_adapter, desactive_adapters, create_system_message, process_generate, process_think, process_tool
+ 
+ 
 @dataclass
 class SatelliteParams:
     name: str
     tools: Any
     adapter_path: Any
     system_prompt: str
+    tools_feedbacks: Any
      
 
      
@@ -29,7 +33,13 @@ class SatelliteSkills:
 
 @dataclass
 class SatelliteMemory:
-    state: LlamaState
+    
+    sys_prompt_msg: dict
+    messages: list[dict]
+
+    base_state: LlamaState
+    current_state: LlamaState
+     
 
 
 
@@ -64,19 +74,21 @@ class PunkRecords:
     adapters_scales_c_float_array: Any
     current_active: str = None
 
- 
-slm = create_generation_model()
 
-
-def _create_vegapunk_satelite(params, memory_state, adapter_c_pointer, scale_c_float_array):
+def _create_vegapunk_satelite(params: SatelliteParams, memory_state: LlamaState, adapter_c_pointer: Any, scale_c_float_array: Any):
 
     skills = SatelliteSkills(
         sys_prompt=params.system_prompt,
         tools=params.tools
     )
 
+    sys_msg = create_system_message(message=params.system_prompt)
+
     memory = SatelliteMemory(
-        state=memory_state
+        messages=[],
+        sys_prompt_msg=sys_msg,
+        base_state=memory_state,
+        current_state=memory_state,
     )
 
     if scale_c_float_array[-1] > 0.0:
@@ -97,9 +109,19 @@ def _create_vegapunk_satelite(params, memory_state, adapter_c_pointer, scale_c_f
     )
 
  
-def _load_memory_and_get_state(model, sys_prompt):
-    tokens = model.tokenize(text=sys_prompt.encode())
-    model.eval(tokens)
+def _load_memory_and_get_state(model: Llama, params: SatelliteParams):
+    sys_msg = create_system_message(params.system_prompt)
+    
+    print('chegou aqui')
+
+    print(params)
+    print(sys_msg)
+    model.create_chat_completion(
+        messages=[sys_msg],
+        tools=params.tools,
+        stream=False,
+        max_tokens=1
+    )
 
     return model.save_state()
  
@@ -112,7 +134,7 @@ def _deploy_vegapunk(model: Llama, params: SatelliteParams) -> VegapunkSatellite
 
     active_adapter(model.ctx, params.name, [(params.name, adapter_c_pointer)], adapter_pointer_c_array, scale_c_float_array, personalized_scale=1.0)
     
-    memory_state =_load_memory_and_get_state(model, params.system_prompt)
+    memory_state =_load_memory_and_get_state(model, params)
 
     _, scale_c_array = desactive_adapters(
         model.ctx, [(params.name, adapter_c_pointer)], adapter_pointer_c_array, scale_c_float_array,
@@ -129,7 +151,7 @@ def activate_vegapunk(model: Llama, punk_records: PunkRecords, target_name: str,
     if punk_records.current_active is not None:
         current = punk_records.satellites[punk_records.current_active]
 
-        current.memory.state = model.save_state()
+        current.memory.current_state = model.save_state()
         current.knowledge.is_active = False
         
         current.knowledge.current_scale = 0.0
@@ -138,6 +160,8 @@ def activate_vegapunk(model: Llama, punk_records: PunkRecords, target_name: str,
         (name, sat.knowledge.knowledge_c_pointer)
         for name, sat in punk_records.satellites.items()
     ]
+
+    model.reset()
 
     active_adapter(
         model.ctx,
@@ -150,7 +174,7 @@ def activate_vegapunk(model: Llama, punk_records: PunkRecords, target_name: str,
 
     target = punk_records.satellites[target_name]
 
-    model.load_state(target.memory.state)
+    model.load_state(target.memory.current_state)
 
     target.knowledge.is_active = True
     target.knowledge.current_scale = scale
@@ -158,73 +182,116 @@ def activate_vegapunk(model: Llama, punk_records: PunkRecords, target_name: str,
     punk_records.current_active = target_name
 
    
-def start_punk_records(model: Llama, vegapunks: List[SatelliteParams]):
-    punks: List[VegapunkSatellite] = []
+def reset_vegapunk(target_name: str, punk_records: PunkRecords):
 
-    for vp in vegapunks:
-        punks.append(_deploy_vegapunk(model, vp))
+    # aqui é pra limpar somente o contexto e o kv cache, não quero 'desativar'. 
 
-    print(f'punks')
+    target = punk_records.satellites[target_name]
+
+    target.memory.messages = []
+    target.memory.current_state = target.memory.base_state
+
+    print(f'{target_name} resetado, contexto e estado limpos.')    
+
+ 
+
+ 
+
+
+def start_punk_records(model: Llama, adapters_path: str):
+    punks_params = [
+        SatelliteParams(
+            name=sat_p['name'],
+            tools=sat_p['skills']['tools'],
+            system_prompt=sat_p['skills']['system_prompt'],
+            tools_feedbacks=sat_p['skills']['tools_feedback'],
+            adapter_path=f'{adapters_path}/{sat_p['adapter_diretory']}/{sat_p['adapter_name']}.gguf',
+        ) for sat_p in vegapunks
+    ]
+
+    for p in punks_params:
+        print(p)
+        
+    vegapunks_satellites: List[VegapunkSatellite] = [_deploy_vegapunk(model, vp) for vp in punks_params]
+
+    print(f'punks {vegapunks_satellites}')
+
     adapters_c_pointer_array, adapters_scales_c_float_array = initialize_adapters(
-            model.ctx, [p.knowledge.knowledge_c_pointer for p in punks]
+            model.ctx, [p.knowledge.knowledge_c_pointer for p in vegapunks_satellites]
         )
     
     print(len(adapters_c_pointer_array))
     
     punk_records = PunkRecords(
-        satellites={p.name: p for p in punks},
+        satellites={p.name: p for p in vegapunks_satellites},
         adapters_pointers_c_array=adapters_c_pointer_array,
         adapters_scales_c_float_array=adapters_scales_c_float_array
     )
 
-    return punk_records
+    return punk_records 
 
+ 
 
-def _load_skills():
-    pass
+def consult_satellite(model: Llama, punk_records, user_message: str):
+    target = punk_records.satellites[punk_records.current_active]
 
-
-def _load_knowledge():
-    pass
-
-
-def startup_satelite(model, sattelite):
-
-
-
-    pass
-
-def switch_to_satellite():
-   
-    _load_skills()
-    _load_knowledge()
-    # _load_personallity() usar pra voz.
+    print(target)
+    user_msg = create_user_message(user_message)
     
+    target.memory.messages.append(user_msg)
 
-def delegate_to_satellite():
-    
-    # usar pra que o manager / shaka possa enviar uma tarefa pra um sateline específico sem eu precisar especificar. 
-    
-    
-    pass
+    full_messages = [target.memory.sys_prompt_msg] + target.memory.messages
 
+    chunks = model.create_chat_completion(
+        messages=full_messages,
+        tools=target.skills.tools or None,
+        max_tokens=512,
+        stream=True
+    )
 
-BASE_DIR = Path(__file__).resolve().parent
-MODEL_DIR = str(BASE_DIR / "models/slm/qwen-3-0.6B")
+    raw = ""
+    after_think = ""
+    think_done = False
 
-ADAPTERS_DIR = f"{MODEL_DIR}/lora_adapters"
-MODEL_PATH = f"{MODEL_DIR}/Qwen3-0.6B-Q8_0.gguf"
+    for chunk in chunks:
+        delta = chunk['choices'][0]['delta']
+        if 'content' not in delta or not delta['content']:
+            continue
 
-_params = SatelliteParams('adapter_b', tools='', adapter_path=f'{ADAPTERS_DIR}/adapter_b/adapter_b.gguf', system_prompt='Você é o Edson, e fala somente português brasileiro!')
-_params_2 = SatelliteParams('adapter_c', tools='', adapter_path=f'{ADAPTERS_DIR}/adapter_c/adapter_c.gguf', system_prompt='Você é o Pythagoras, e fala somente português brasileiro! Você é focado em planejar.')
-_params_3 = SatelliteParams('adapter_a', tools='', adapter_path=f'{ADAPTERS_DIR}/adapter_v8/adapter_v8.gguf', system_prompt='Você é o shaka, e fala somente português brasileiro! Você é focado em estudos e pesquisar e também gosta muito de matemática.')
+        token = delta['content']
+        raw += token
 
-punk_recors = start_punk_records(slm, [_params, _params_2, _params_3])
+        if not think_done:
+            
+            if '</think>' in raw:
+                think_done = True
+                _, after_think = process_think(raw)
 
-print(punk_recors)
+            continue
 
-activate_vegapunk(slm, punk_recors, _params_2.name)
+        after_think += token
+        stripped = after_think.strip()
 
-print(punk_recors)
+        if not stripped:
+            continue
 
-# TO-DO amanhã, criar as funções pra trocar de vegapunk manter scales atuais de cada um na classe manager pra saber qual ta ativo, criar função de inicializar todos.
+        mode = identify_mode(stripped)
+        print(f'modo retornado pelo slm {mode}')
+
+     
+        if mode == 'tool':
+            tool_data, extra_raw = process_tool(after_think, chunks)
+            raw += extra_raw
+            target.memory.messages.append({'role': 'assistant', 'content': raw})
+            return 'tool_call', tool_data
+
+        else:
+            _, extra_raw = process_generate(stripped, chunks)
+            raw += extra_raw
+            cleaned = (after_think + extra_raw).strip()
+            target.memory.messages.append({'role': 'assistant', 'content': raw})
+            return 'message', cleaned
+
+    target.memory.messages.append({'role': 'assistant', 'content': raw})
+    return 'message', ''
+ 

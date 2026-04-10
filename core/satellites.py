@@ -84,6 +84,7 @@ pythagoras_tools_feedback = {
 edson = {
     'name': 'edson',
     'adapter_name': 'edson',
+    'adapter_diretory': 'edson',
     'skills': {
         'system_prompt': edson_system_prompt,
         'tools': edson_tools,
@@ -94,6 +95,7 @@ edson = {
 shaka = {
     'name': 'shaka',
     'adapter_name': 'shaka',
+    'adapter_diretory': 'shaka',
     'skills': {
         'system_prompt': shaka_system_prompt,
         'tools': shaka_tools,
@@ -104,6 +106,7 @@ shaka = {
 pythagoras = {
     'name': 'pythagoras',
     'adapter_name': 'pythagoras',
+    'adapter_diretory': 'pythagoras',
     'skills': {
         'system_prompt': pythagoras_system_prompt,
         'tools': pythagoras_tools,
@@ -111,4 +114,4 @@ pythagoras = {
     }
 }
 
-
+vegapunks = [edson, shaka, pythagoras]
