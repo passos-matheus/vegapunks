@@ -1,3 +1,4 @@
 pyaudio
 numpy
 sherpa_onnx
+llama-cpp-python
