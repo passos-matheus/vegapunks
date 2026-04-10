@@ -267,17 +267,36 @@ async def echo():
     # 
     pass
 
+async def teste():
+    so_audio_resources = pyaudio.PyAudio()
+    stop_audio_workers_flag = threading.Event()
 
+    audio_input_queue = asyncio.Queue()
+    audio_output_queue = asyncio.Queue()
+
+    sentence = 'Opa, mestreeeeeeeeeeeeeeeeeee'
+    tts_model = create_speech_synthesis_model()
+
+    audio_producer_task = asyncio.create_task(
+        audio_producer_worker(
+            so_audio_resources,
+            stop_audio_workers_flag, 
+            audio_output_queue,
+            tts_model
+        )
+    )
+    
+   
+    asyncio.create_task(audio_output_queue.put(sentence))
+
+    await asyncio.sleep(10)
+    
 if __name__ == "__main__":
-    #asyncio.run(main())
-
-    model = create_generation_model()
-    punk_records = start_punk_records(model, ADAPTERS_DIR)
-    activate_vegapunk(punk_records, target_name='edson')
-
-
-    t = consult_satellite(punk_records, 'Quala a previsão do tempo para são paulo?')
-    print(t)
+    
+    
+   
+    asyncio.run(teste())
+ 
 
 
     

@@ -4,7 +4,7 @@ import collections
 import numpy as np
 
 from modules.stt import create_voice_detection_model, create_transcription_model, transcribe_speech_segment
-
+from modules.tts import sintetize_speech_segment
 
 format = pyaudio.paFloat32
 channels = 1
@@ -42,8 +42,10 @@ def audio_consumer_worker(so_audio_resources: pyaudio.PyAudio, stop_flag, number
             break        
 
 
-async def audio_producer_worker(so_audio_resources: pyaudio.PyAudio, stop_flag, _audio_bytes_queue):
+async def audio_producer_worker(so_audio_resources: pyaudio.PyAudio, stop_flag, _sentences_queue, tts_model):
     try:
+        loop = asyncio.get_running_loop()
+
         _audio_output_stream = so_audio_resources.open(
             format=format, 
             channels=channels, 
@@ -57,8 +59,11 @@ async def audio_producer_worker(so_audio_resources: pyaudio.PyAudio, stop_flag, 
         
     while not stop_flag.is_set():
         try:        
-            audio_bytes = await _audio_bytes_queue.get()
-            _audio_output_stream.write(audio_bytes)
+            sentence = await _sentences_queue.get()
+
+            audio_sentence = await loop.run_in_executor(None, sintetize_speech_segment, tts_model, sentence)
+
+            _audio_output_stream.write(audio_sentence.tobytes())
             
         except OSError:
             print('stream de output cancelado manualmente')
