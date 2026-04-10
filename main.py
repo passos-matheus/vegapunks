@@ -273,10 +273,10 @@ if __name__ == "__main__":
 
     model = create_generation_model()
     punk_records = start_punk_records(model, ADAPTERS_DIR)
-    activate_vegapunk(model, punk_records, target_name='edson')
+    activate_vegapunk(punk_records, target_name='edson')
 
 
-    t = consult_satellite(model, punk_records, 'Quala a previsão do tempo para são paulo?')
+    t = consult_satellite(punk_records, 'Quala a previsão do tempo para são paulo?')
     print(t)
 
 
