@@ -2,11 +2,11 @@
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, List
 
 from llama_cpp import Llama, LlamaState
 
-from modules.slm import create_generation_model, _load_adapter_in_memory, _initialize_adapters, active_adapter, desactive_adapters
+from modules.slm import create_generation_model, load_adapter_in_memory, initialize_adapters, active_adapter, desactive_adapters
 
 @dataclass
 class SatelliteParams:
@@ -28,9 +28,17 @@ class SatelliteSkills:
     tools: str
 
 @dataclass
-class SatelliteKnowledge:
+class SatelliteMemory:
     state: LlamaState
-    adapter_pointer: Any
+
+
+
+@dataclass
+class SatelliteKnowledge:
+    is_active: bool
+    current_scale: float
+    knowledge_c_pointer: Any
+    
 
 class SatelliteAppearance:
     pass
@@ -41,74 +49,100 @@ class SatellitePersonallity:
 @dataclass
 class VegapunkSatellite:
         name: str
+
         skills: SatelliteSkills
+        memory: SatelliteMemory
+
         knowledge: SatelliteKnowledge
 
-        appearance = None
-        personallity = None
 
 
 @dataclass
-class VegapunkSatellitesManager:
+class PunkRecords:
     satellites: dict[str, VegapunkSatellite]       
-    
+    adapters_pointers_c_array: Any
+    adapters_scales_c_float_array: Any
 
  
 slm = create_generation_model()
 
-def warmup_agent(model: Llama, params: SatelliteParams):
-    model.reset()
-    
-    adapter_pointer = _load_adapter_in_memory(model.model, params.adapter_path, params.name)
-    adapter_tuple = [(params.name, adapter_pointer)]
- 
-    adapter_pointer_c_array, scale_c_float_array =_initialize_adapters(model.ctx, adapter_tuple)
-    print('aaaaaaaaaa')
-    actived_adapter, current_actived_adapter_scale = active_adapter(model.ctx, params.name, adapter_tuple, adapter_pointer_c_array, scale_c_float_array, personalized_scale=1.0)
-    print('aaaaaaaaaa')
-   
-    print(actived_adapter)
-    print(current_actived_adapter_scale)
 
-    print('deu certo os adapters!')
-
-    tokens = model.tokenize(text=params.system_prompt.encode())
-    print(f"tokens: {len(tokens)}, n_ctx: {model.n_ctx()}")
- 
-    print('bbbbbbbbbbbb')
-
-    model.eval(tokens)
- 
-    state = model.save_state()
- 
+def _create_vegapunk_satelite(params, memory_state, adapter_c_pointer, scale_c_float_array):
 
     skills = SatelliteSkills(
         sys_prompt=params.system_prompt,
         tools=params.tools
     )
 
-    know = SatelliteKnowledge(
-        state=state,
-        adapter_pointer=adapter_pointer
+    memory = SatelliteMemory(
+        state=memory_state
     )
 
-    satellite = VegapunkSatellite(
+    if scale_c_float_array[-1] > 0.0:
+        raise Exception('criando um vegapunk já ativo!')
+
+    knowledge = SatelliteKnowledge(
+        is_active=False,
+        knowledge_c_pointer=adapter_c_pointer,
+        current_scale=scale_c_float_array[-1],
+    )
+
+    return VegapunkSatellite(
         name=params.name,
-        knowledge=know,
+
+        memory=memory,
+        knowledge=knowledge,
         skills=skills
     )
 
-    desactived_adapters = desactive_adapters(
-        model.ctx, adapter_tuple, adapter_pointer_c_array, scale_c_float_array,
+ 
+def _load_memory_and_get_state(model, sys_prompt):
+    tokens = model.tokenize(text=sys_prompt.encode())
+    model.eval(tokens)
+
+    return model.save_state()
+ 
+def _deploy_vegapunk(model: Llama, params: SatelliteParams) -> VegapunkSatellite:
+    model.reset()
+    
+    adapter_c_pointer = load_adapter_in_memory(model.model, params.adapter_path, params.name)
+    
+    adapter_pointer_c_array, scale_c_float_array = initialize_adapters(model.ctx, [adapter_c_pointer])
+
+    active_adapter(model.ctx, params.name, [(params.name, adapter_c_pointer)], adapter_pointer_c_array, scale_c_float_array, personalized_scale=1.0)
+    
+    memory_state =_load_memory_and_get_state(model, params.system_prompt)
+
+    _, scale_c_array = desactive_adapters(
+        model.ctx, [(params.name, adapter_c_pointer)], adapter_pointer_c_array, scale_c_float_array,
     )
 
-    print(desactived_adapters)
-
-    return satellite
+    return _create_vegapunk_satelite(
+        params, memory_state, adapter_c_pointer, scale_c_array
+    )
 
    
+def start_punk_records(model: Llama, vegapunks: List[SatelliteParams]):
+    punks: List[VegapunkSatellite] = []
 
+    for vp in vegapunks:
+        punks.append(_deploy_vegapunk(model, vp))
+
+    print(f'punks')
+    adapters_c_pointer_array, adapters_scales_c_float_array = initialize_adapters(
+            model.ctx, [p.knowledge.knowledge_c_pointer for p in punks]
+        )
     
+    print(len(adapters_c_pointer_array))
+    
+    punk_records = PunkRecords(
+        satellites={p.name: p for p in punks},
+        adapters_pointers_c_array=adapters_c_pointer_array,
+        adapters_scales_c_float_array=adapters_scales_c_float_array
+    )
+
+    return punk_records
+
 
 def _load_skills():
     pass
@@ -149,23 +183,8 @@ _params = SatelliteParams('adapter_b', tools='', adapter_path=f'{ADAPTERS_DIR}/a
 _params_2 = SatelliteParams('adapter_c', tools='', adapter_path=f'{ADAPTERS_DIR}/adapter_c/adapter_c.gguf', system_prompt='Você é o Pythagoras, e fala somente português brasileiro! Você é focado em planejar.')
 _params_3 = SatelliteParams('adapter_a', tools='', adapter_path=f'{ADAPTERS_DIR}/adapter_v8/adapter_v8.gguf', system_prompt='Você é o shaka, e fala somente português brasileiro! Você é focado em estudos e pesquisar e também gosta muito de matemática.')
 
-vegapunk_1 = warmup_agent(slm, _params)
-vegapunk_2 = warmup_agent(slm, _params_2)
-vegapunk_3 = warmup_agent(slm, _params_3)
+punk_recors = start_punk_records(slm, [_params, _params_2, _params_3])
 
-print(vegapunk_1.knowledge.state.n_tokens)
-print(vegapunk_2.knowledge.state.n_tokens)
-print(vegapunk_3.knowledge.state.n_tokens)
+print(punk_recors)
 
-
-vps = {
-    'punk1': vegapunk_1,
-    'punk2': vegapunk_2,
-    'punk3': vegapunk_3
-}
-
-manager = VegapunkSatellitesManager(satellites=vps)
-
-print(manager.satellites['punk1'].name)
-
-# TO-DO amanhã, criar as funções pra trocar de vegapunk, manter scales atuais de cada um na classe manager pra saber qual ta ativo, criar função de inicializar todos.
+# TO-DO amanhã, criar as funções pra trocar de vegapunk manter scales atuais de cada um na classe manager pra saber qual ta ativo, criar função de inicializar todos.

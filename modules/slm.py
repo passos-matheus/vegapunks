@@ -47,7 +47,8 @@ def desactive_adapters(ctx, name_pointer_tuple_list, adapters, scales):
 
     desactived_adapters = [name for name, _ in name_pointer_tuple_list]
 
-    return desactived_adapters
+    print(f'Desativandos adapters: {desactived_adapters}.')
+    return desactived_adapters, scales
 
  
 
@@ -55,6 +56,12 @@ def active_adapter(ctx, target_adapter, name_pointer_tuple_list, adapters, scale
     _count = len(scales)
     actived_adapter = None
 
+    print('ACITVE ADAPTERRR')
+    print(target_adapter)
+    print(name_pointer_tuple_list)
+
+    print(name_pointer_tuple_list[0][0])
+    print('CABOUUUUUUUUUU')
     for i in range(0, _count):
         if target_adapter == name_pointer_tuple_list[i][0]:
             actived_adapter = target_adapter
@@ -72,26 +79,30 @@ def active_adapter(ctx, target_adapter, name_pointer_tuple_list, adapters, scale
     if code != 0:
         raise Exception('deu ruim tbm')
 
+    print(f'Adapter {actived_adapter} ativado! Scale: {personalized_scale}')
     return actived_adapter, personalized_scale
 
-def _initialize_adapters(ctx, adapters):
-    _adapters_count = len(adapters)
+def initialize_adapters(ctx, adapters_c_pointers):
+    _adapters_count = len(adapters_c_pointers)
+
+    print(len(adapters_c_pointers))
+    print(adapters_c_pointers[-1])
 
     _void_c_float_scales_array = _create_pure_C_array(ctypes.c_float, _adapters_count)
-    _void_c_adapters_pointer_array = _create_pure_C_array(type(adapters[-1][-1]), _adapters_count)
+    _void_c_adapters_pointer_array = _create_pure_C_array(type(adapters_c_pointers[-1]), _adapters_count)
 
 
     _scales_c_float_array = _void_c_float_scales_array(*([0.0] * _adapters_count))
-    _adapter_pointers_c_array = _void_c_adapters_pointer_array(*[adapter_p for _, adapter_p in adapters])
+    _adapter_pointers_c_array = _void_c_adapters_pointer_array(*[adapter_p for adapter_p in adapters_c_pointers])
 
     code = llama_set_adapters_lora(ctx, _adapter_pointers_c_array, _adapters_count, _scales_c_float_array)
 
     if code != 0:
-        raise 'deu ruim'
+        raise Exception('deu ruim')
     
     return _adapter_pointers_c_array, _scales_c_float_array 
 
-def _load_adapter_in_memory(model, adapter_path, adapter_name):
+def load_adapter_in_memory(model, adapter_path, adapter_name):
     pointer = llama_adapter_lora_init(model, adapter_path.encode('utf-8'))
     
     if pointer is None:
