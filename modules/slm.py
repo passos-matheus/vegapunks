@@ -55,13 +55,7 @@ def desactive_adapters(ctx, name_pointer_tuple_list, adapters, scales):
 def active_adapter(ctx, target_adapter, name_pointer_tuple_list, adapters, scales, personalized_scale = 1.0):
     _count = len(scales)
     actived_adapter = None
-
-    print('ACITVE ADAPTERRR')
-    print(target_adapter)
-    print(name_pointer_tuple_list)
-
-    print(name_pointer_tuple_list[0][0])
-    print('CABOUUUUUUUUUU')
+ 
     for i in range(0, _count):
         if target_adapter == name_pointer_tuple_list[i][0]:
             actived_adapter = target_adapter

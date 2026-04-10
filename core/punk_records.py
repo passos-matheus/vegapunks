@@ -62,6 +62,7 @@ class PunkRecords:
     satellites: dict[str, VegapunkSatellite]       
     adapters_pointers_c_array: Any
     adapters_scales_c_float_array: Any
+    current_active: str = None
 
  
 slm = create_generation_model()
@@ -120,6 +121,41 @@ def _deploy_vegapunk(model: Llama, params: SatelliteParams) -> VegapunkSatellite
     return _create_vegapunk_satelite(
         params, memory_state, adapter_c_pointer, scale_c_array
     )
+
+def activate_vegapunk(model: Llama, punk_records: PunkRecords, target_name: str, scale: float = 1.0):
+
+    print(f'ativando o vegapunk {target_name}')
+
+    if punk_records.current_active is not None:
+        current = punk_records.satellites[punk_records.current_active]
+
+        current.memory.state = model.save_state()
+        current.knowledge.is_active = False
+        
+        current.knowledge.current_scale = 0.0
+
+    name_pointer_tuples = [
+        (name, sat.knowledge.knowledge_c_pointer)
+        for name, sat in punk_records.satellites.items()
+    ]
+
+    active_adapter(
+        model.ctx,
+        target_name,
+        name_pointer_tuples,
+        punk_records.adapters_pointers_c_array,
+        punk_records.adapters_scales_c_float_array,
+        personalized_scale=scale
+    )
+
+    target = punk_records.satellites[target_name]
+
+    model.load_state(target.memory.state)
+
+    target.knowledge.is_active = True
+    target.knowledge.current_scale = scale
+
+    punk_records.current_active = target_name
 
    
 def start_punk_records(model: Llama, vegapunks: List[SatelliteParams]):
@@ -184,6 +220,10 @@ _params_2 = SatelliteParams('adapter_c', tools='', adapter_path=f'{ADAPTERS_DIR}
 _params_3 = SatelliteParams('adapter_a', tools='', adapter_path=f'{ADAPTERS_DIR}/adapter_v8/adapter_v8.gguf', system_prompt='Você é o shaka, e fala somente português brasileiro! Você é focado em estudos e pesquisar e também gosta muito de matemática.')
 
 punk_recors = start_punk_records(slm, [_params, _params_2, _params_3])
+
+print(punk_recors)
+
+activate_vegapunk(slm, punk_recors, _params_2.name)
 
 print(punk_recors)
 
