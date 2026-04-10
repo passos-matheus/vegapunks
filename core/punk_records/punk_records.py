@@ -180,9 +180,20 @@ def _send_to_tts(text, output_queue, loop):
         asyncio.run_coroutine_threadsafe(output_queue.put(text), loop)
     else:
         print(text)
- 
 
-def consult_satellite(punk_records: PunkRecords, user_message: str, output_queue=None, loop=None):
+
+def _safe_tool_exec(fn, tool_args, punk_records):
+    try:
+        result = fn(tool_args, punk_records)
+        print(result)
+        return None, result
+    
+    except Exception as e:
+        print(f'[tool_error] {e}')
+        return str(e), None
+    
+
+def consult_satellite(punk_records: PunkRecords, user_message: str, output_queue=None, loop=None, _is_retry=False):
 
     if output_queue is None or loop is None:
         raise Exception('output queue ou loop n enviado!')
@@ -190,8 +201,9 @@ def consult_satellite(punk_records: PunkRecords, user_message: str, output_queue
     model = punk_records.model
     target = punk_records.satellites[punk_records.current_active]
 
-    user_msg = create_user_message(user_message)
-    target.memory.messages.append(user_msg)
+    if not _is_retry:
+        user_msg = create_user_message(user_message)
+        target.memory.messages.append(user_msg)
 
     full_messages = [target.memory.sys_prompt_msg] + target.memory.messages
 
@@ -242,14 +254,28 @@ def consult_satellite(punk_records: PunkRecords, user_message: str, output_queue
                     before_text = _format_tool_feedback(tool_exec['before'], tool_args)
                     _send_to_tts(before_text, output_queue, loop)
 
-                    result = tool_exec['fn'](tool_args)
+                    error, result = _safe_tool_exec(tool_exec['fn'], tool_args, punk_records)
 
-                    after_text = _format_tool_feedback(tool_exec['after'], tool_args, result=result)
-                    _send_to_tts(after_text, output_queue, loop)
+                    if error is None:
+                        
+                        after_text = _format_tool_feedback(tool_exec['after'], tool_args, result=result)
 
-                    target.memory.messages.append({'role': 'tool', 'content': str(result)})
+                        _send_to_tts(after_text, output_queue, loop)
+                        
+                        target.memory.messages.append({'role': 'tool', 'content': str(result)})
+
+                    else:
+                        
+                        error_text = _format_tool_feedback(tool_exec['error'], tool_args)
+                        
+                        _send_to_tts(error_text, output_queue, loop)
+
+                        target.memory.messages.append({'role': 'tool', 'content': f'error: {error}'})
+                        target.memory.messages.append({'role': 'user', 'content': f'a tool retornou um erro: {error}'})
+
+                        return 'error', tool_data
                 else:
-                    print(f'[warning] tool {tool_name} não encontrada em tools_exec')
+                    print(f'tool {tool_name} não encontrada em tools_exec, fazendo nada')
 
             return 'tool_call', tool_data
 
@@ -262,3 +288,24 @@ def consult_satellite(punk_records: PunkRecords, user_message: str, output_queue
 
     target.memory.messages.append({'role': 'assistant', 'content': raw})
     return 'message', ''
+
+
+async def reconsult_satellite(punk_records: PunkRecords, user_message: str, output_queue=None, loop=None):
+    result_type, data = await loop.run_in_executor(
+        None, consult_satellite, punk_records, user_message, output_queue, loop
+    )
+
+    if result_type != 'error':
+        return result_type, data
+
+    result_type, data = await loop.run_in_executor(
+        None, lambda: consult_satellite(punk_records, '', output_queue, loop, _is_retry=True)
+    )
+
+    if result_type != 'error':
+        return result_type, data
+
+    target_name = punk_records.current_active
+    reset_vegapunk(punk_records, target_name)
+    _send_to_tts('realmente não consegui realizar essa ação', output_queue, loop)
+    return 'error', None

@@ -8,7 +8,7 @@ from modules.slm import create_generation_model
 from modules.audio import normalize_to_float_array
 from modules.tts import create_speech_synthesis_model
 from modules.wakeword import create_wakeword_model, detect_wakeword_in_speech_segment
-from core.punk_records import start_punk_records, consult_satellite, activate_vegapunk
+from core.punk_records import start_punk_records, reconsult_satellite, activate_vegapunk
 from modules.workers.audio_workers import audio_consumer_worker, audio_producer_worker
 from modules.stt import create_voice_detection_model, create_transcription_model, transcribe_speech_segment, extract_speech_segment
 
@@ -69,9 +69,12 @@ def _extract_segment(audio_bytes, audio_history, total_samples_fed, voice_detect
     return segment, new_total
 
 
-async def _pipeline_loop(stop_flag, audio_input_queue, tts_output_queue, loop,
-                         voice_detection_model, wakeword_model, transcription_model,
-                         punk_records=None):
+async def _pipeline_loop(
+        stop_flag, 
+        audio_input_queue, tts_output_queue, loop,
+        voice_detection_model, wakeword_model, transcription_model, punk_records=None
+    ):
+    
     is_wakeword_active = False
     total_samples_fed = 0
     audio_history = deque()
@@ -86,14 +89,15 @@ async def _pipeline_loop(stop_flag, audio_input_queue, tts_output_queue, loop,
 
             if speech_segment is None:
                 continue
-
-            is_waked = detect_wakeword_in_speech_segment(wakeword_model, speech_segment)
-
-            if is_waked:
-                print(f'wakeword detectado!')
-                is_wakeword_active = not is_wakeword_active
-
+            
             if not is_wakeword_active:
+                is_wakeword_active = detect_wakeword_in_speech_segment(wakeword_model, speech_segment)
+                
+                if not is_wakeword_active: 
+                    continue
+
+                print('wakeword detectadaa')
+                await tts_output_queue.put('E aí, mestre!')
                 continue
 
             transcription = transcribe_speech_segment(
@@ -104,7 +108,7 @@ async def _pipeline_loop(stop_flag, audio_input_queue, tts_output_queue, loop,
             print(f'transcrição: {transcription}')
 
             if punk_records is not None:
-                consult_satellite(punk_records, transcription, output_queue=tts_output_queue, loop=loop)
+                await reconsult_satellite(punk_records, transcription, output_queue=tts_output_queue, loop=loop)
             else:
                 await tts_output_queue.put(transcription)
 

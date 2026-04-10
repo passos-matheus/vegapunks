@@ -60,6 +60,7 @@ async def audio_producer_worker(so_audio_resources: pyaudio.PyAudio, stop_flag, 
     while not stop_flag.is_set():
         try:        
             sentence = await _sentences_queue.get()
+            print(f'[tts sentence] {sentence}')
 
             audio_sentence = await loop.run_in_executor(None, sintetize_speech_segment, tts_model, sentence)
 
