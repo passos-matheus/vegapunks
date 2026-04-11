@@ -52,14 +52,14 @@ tools_exec = {
     'get_weather': {
         'fn': get_weather,
         'before': 'consultando a previsão do tempo em {city}, aguarde um instante!',
-        'after': 'a previsão do tempo em {city} é {result}',
-        'error': 'não consegui consultar o tempo em {city}',
+        'after': 'a previsão do tempo é {result}',
+        'error': 'não consegui consultar o tempo em {city}, deixa eu tentar de ovo',
     },
     'switch_satellite': {
         'fn': switch_satellite,
         'before': 'trocando para {target}!',
         'after': 'pronto, agora você está falando com {target}.',
-        'error': 'não consegui trocar para {target}',
+        'error': 'não consegui trocar para {target}, deixa eu tentar de novo.',
     },
 }
 

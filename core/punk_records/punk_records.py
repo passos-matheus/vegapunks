@@ -194,6 +194,7 @@ def _safe_tool_exec(fn, tool_args, punk_records):
     
 
 def consult_satellite(punk_records: PunkRecords, user_message: str, output_queue=None, loop=None, _is_retry=False):
+    print(f'mensagem recebida: {user_message}')
 
     if output_queue is None or loop is None:
         raise Exception('output queue ou loop n enviado!')
@@ -299,7 +300,7 @@ async def reconsult_satellite(punk_records: PunkRecords, user_message: str, outp
         return result_type, data
 
     result_type, data = await loop.run_in_executor(
-        None, lambda: consult_satellite(punk_records, '', output_queue, loop, _is_retry=True)
+        None, lambda: consult_satellite(punk_records, 'verifique os parâmetros e tente de novo, confirme com o usuário se eles estão corretos de fato.', output_queue, loop, _is_retry=True)
     )
 
     if result_type != 'error':
