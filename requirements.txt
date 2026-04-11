@@ -1,4 +1,7 @@
-pyaudio
-numpy
-sherpa_onnx
-llama-cpp-python
+pyaudio==0.2.14
+numpy==2.4.4
+scipy==1.17.1
+sherpa_onnx==1.12.36
+llama-cpp-python==0.3.20
+openwakeword==0.4.0
+pygame==2.6.1
