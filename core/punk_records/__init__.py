@@ -9,6 +9,7 @@ from core.punk_records.punk_records import (
 from core.punk_records.dataclasses import (
     PunkRecords,
     VegapunkSatellite,
+    VegapunkPresentation,
     SatelliteParams,
     SatelliteSkills,
     SatelliteMemory,
