@@ -3,6 +3,7 @@ import pickle
 
 from pathlib import Path
 from typing import List
+from modules.face import send_face
 from llama_cpp import Llama, LlamaState
 
 from modules.slm import (
@@ -158,6 +159,9 @@ def activate_vegapunk(punk_records: PunkRecords, target_name: str, scale: float 
 
     punk_records.current_active = target_name
 
+    if punk_records.face_queue is not None:
+        send_face(punk_records.face_queue, "mode", target_name)
+
 
 def reset_vegapunk(punk_records: PunkRecords, target_name: str):
     target = punk_records.satellites[target_name]
@@ -201,11 +205,13 @@ def _format_tool_feedback(template, tool_args, result=None):
         format_args['result'] = result
     return template.format(**format_args)
 
-def _send_to_tts(text, output_queue, loop):
+def _send_to_tts(text, output_queue, loop, face_queue=None):
     if output_queue is not None and loop is not None:
         asyncio.run_coroutine_threadsafe(output_queue.put(text), loop)
     else:
         print(text)
+    if face_queue is not None:
+        send_face(face_queue, "state", "speaking")
 
 
 def _safe_tool_exec(fn, tool_args, punk_records):
@@ -279,7 +285,7 @@ def consult_satellite(punk_records: PunkRecords, user_message: str, output_queue
 
                 if tool_exec:
                     before_text = _format_tool_feedback(tool_exec['before'], tool_args)
-                    _send_to_tts(before_text, output_queue, loop)
+                    _send_to_tts(before_text, output_queue, loop, face_queue=punk_records.face_queue)
 
                     error, result = _safe_tool_exec(tool_exec['fn'], tool_args, punk_records)
 
@@ -287,7 +293,7 @@ def consult_satellite(punk_records: PunkRecords, user_message: str, output_queue
                         
                         after_text = _format_tool_feedback(tool_exec['after'], tool_args, result=result)
 
-                        _send_to_tts(after_text, output_queue, loop)
+                        _send_to_tts(after_text, output_queue, loop, face_queue=punk_records.face_queue)
                         
                         target.memory.messages.append({'role': 'tool', 'content': str(result)})
 
@@ -295,7 +301,7 @@ def consult_satellite(punk_records: PunkRecords, user_message: str, output_queue
                         
                         error_text = _format_tool_feedback(tool_exec['error'], tool_args)
                         
-                        _send_to_tts(error_text, output_queue, loop)
+                        _send_to_tts(error_text, output_queue, loop, face_queue=punk_records.face_queue)
 
                         target.memory.messages.append({'role': 'tool', 'content': f'error: {error}'})
                         target.memory.messages.append({'role': 'user', 'content': f'a tool retornou um erro: {error}'})
@@ -307,7 +313,7 @@ def consult_satellite(punk_records: PunkRecords, user_message: str, output_queue
             return 'tool_call', tool_data
 
         else:
-            _, extra_raw = process_generate(stripped, chunks, on_sentence=lambda text: _send_to_tts(text, output_queue, loop))
+            _, extra_raw = process_generate(stripped, chunks, on_sentence=lambda text: _send_to_tts(text, output_queue, loop, face_queue=punk_records.face_queue))
             raw += extra_raw
             cleaned = (after_think + extra_raw).strip()
             target.memory.messages.append({'role': 'assistant', 'content': raw})
@@ -334,5 +340,5 @@ async def reconsult_satellite(punk_records: PunkRecords, user_message: str, outp
 
     target_name = punk_records.current_active
     reset_vegapunk(punk_records, target_name)
-    _send_to_tts('realmente não consegui realizar essa ação', output_queue, loop)
+    _send_to_tts('realmente não consegui realizar essa ação', output_queue, loop, face_queue=punk_records.face_queue)
     return 'error', None

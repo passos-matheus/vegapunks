@@ -4,11 +4,14 @@ import threading
 
 from pathlib import Path
 from collections import deque
+from dataclasses import asdict
 from modules.slm import create_generation_model
 from modules.audio import normalize_to_float_array
 from modules.tts import create_speech_synthesis_model
+from modules.face import start_face, send_face
 from modules.wakeword import create_wakeword_model, detect_wakeword_in_speech_segment
 from core.punk_records import start_punk_records, reconsult_satellite, activate_vegapunk
+from core.punk_records.satellites import vegapunks as vp_configs
 from modules.workers.audio_workers import audio_consumer_worker, audio_producer_worker
 from modules.stt import create_voice_detection_model, create_transcription_model, transcribe_speech_segment, extract_speech_segment
 
@@ -97,6 +100,7 @@ async def _pipeline_loop(
                     continue
 
                 print('wakeword detectadaa')
+                send_face(punk_records.face_queue if punk_records else None, "state", "listening")
                 await tts_output_queue.put('E aí, mestre!')
                 continue
 
@@ -108,11 +112,14 @@ async def _pipeline_loop(
             print(f'transcrição: {transcription}')
 
             if punk_records is not None:
+                send_face(punk_records.face_queue, "state", "thinking")
                 await reconsult_satellite(punk_records, transcription, output_queue=tts_output_queue, loop=loop)
+                send_face(punk_records.face_queue, "state", "listening")
 
                 if punk_records.shutdown_event.is_set():
                     punk_records.shutdown_event.clear()
                     is_wakeword_active = False
+                    send_face(punk_records.face_queue, "state", "sleeping")
                     print('shutdown ativado, aguardando wakeword...')
                     continue
             else:
@@ -129,6 +136,13 @@ async def run_punk_records():
     wakeword_model, transcription_model, voice_detection_model, tts_model = _create_models()
     punk_records = _create_punk_records()
 
+    face_queue = start_face()
+    punk_records.face_queue = face_queue
+    appearances = {cfg['name']: asdict(cfg['appearance']) for cfg in vp_configs}
+    send_face(face_queue, "appearances", appearances)
+    send_face(face_queue, "mode", punk_records.current_active)
+    send_face(face_queue, "state", "sleeping")
+
     producer_task = _start_audio_producer(so, stop_flag, tts_output_queue, tts_model)
     _start_audio_consumer(so, stop_flag, audio_input_queue, loop)
 
@@ -141,6 +155,7 @@ async def run_punk_records():
     except asyncio.CancelledError:
         print('cancelado.')
     finally:
+        send_face(punk_records.face_queue, "quit", None)
         so.terminate()
         producer_task.cancel()
 
