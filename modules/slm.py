@@ -1,8 +1,8 @@
-import ctypes 
- 
+import ctypes
+import hashlib
 import json
 from pathlib import Path
-import re 
+import re
 from llama_cpp import llama_set_adapters_lora, llama_adapter_lora_init, Llama
 
 
@@ -175,4 +175,9 @@ def create_user_message(message: str):
 
 def create_system_message(message: str):
     return {'role': 'system', 'content': message}
+
+
+def compute_state_hash(adapter_path, system_prompt, tools):
+    payload = f"{adapter_path}|{system_prompt}|{json.dumps(tools, sort_keys=True)}"
+    return hashlib.sha256(payload.encode()).hexdigest()
 

@@ -1,5 +1,7 @@
 import asyncio
+import pickle
 
+from pathlib import Path
 from typing import List
 from llama_cpp import Llama, LlamaState
 
@@ -11,6 +13,7 @@ from modules.slm import (
     active_adapter,
     desactive_adapters,
     create_system_message,
+    compute_state_hash,
     process_generate,
     process_think,
     process_tool,
@@ -63,6 +66,20 @@ def _create_vegapunk_satelite(params: SatelliteParams, memory_state: LlamaState,
 
 
 def _load_memory_and_get_state(model: Llama, params: SatelliteParams):
+    cache_dir = Path(params.adapter_path).parent
+    cache_path = cache_dir / f"cached_base_state_{params.name}.pkl"
+    current_hash = compute_state_hash(params.adapter_path, params.system_prompt, params.tools)
+
+    if cache_path.exists():
+        with open(cache_path, 'rb') as f:
+            cache_data = pickle.load(f)
+
+        if cache_data['hash'] == current_hash:
+            print(f'{params.name}: base state carregado do cache')
+            return cache_data['state']
+
+        print(f'{params.name}: hash mudou, regenerando cache...')
+
     sys_msg = create_system_message(params.system_prompt)
 
     model.create_chat_completion(
@@ -72,7 +89,13 @@ def _load_memory_and_get_state(model: Llama, params: SatelliteParams):
         max_tokens=1,
     )
 
-    return model.save_state()
+    state = model.save_state()
+
+    with open(cache_path, 'wb') as f:
+        pickle.dump({'hash': current_hash, 'state': state}, f)
+
+    print(f'{params.name}: base state salvo em cache ({cache_path.name})')
+    return state
 
 
 def _deploy_vegapunk(model: Llama, params: SatelliteParams) -> VegapunkSatellite:
