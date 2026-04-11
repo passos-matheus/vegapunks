@@ -10,6 +10,18 @@ def switch_satellite(args, punk_records):
     return f'trocado para {target}'
 
 
+def clear_context(args, punk_records):
+    from core.punk_records.punk_records import reset_vegapunk
+    name = punk_records.current_active
+    reset_vegapunk(punk_records, name)
+    return f'contexto de {name} limpo'
+
+
+def shutdown(args, punk_records):
+    punk_records.shutdown_event.set()
+    return 'desligando'
+
+
 tools = [
     {
         "type": "function",
@@ -45,6 +57,30 @@ tools = [
                 "required": ["target"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "clear_context",
+            "description": "Limpa o contexto e histórico da conversa atual, resetando o assistente.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "shutdown",
+            "description": "Desativa o assistente até ser chamado novamente pela palavra de ativação.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        }
     }
 ]
 
@@ -61,12 +97,25 @@ tools_exec = {
         'after': 'pronto, agora você está falando com {target}.',
         'error': 'não consegui trocar para {target}, deixa eu tentar de novo.',
     },
+    'clear_context': {
+        'fn': clear_context,
+        'before': 'limpando meu contexto...',
+        'after': 'pronto, contexto limpo! como posso ajudar?',
+        'error': 'não consegui limpar o contexto',
+    },
+    'shutdown': {
+        'fn': shutdown,
+        'before': 'desligando...',
+        'after': 'até mais, mestre!',
+        'error': 'não consegui desligar',
+    },
 }
 
 system_prompt = (
     'Você é o Shaka, fala somente português brasileiro. '
     'Você pode consultar a previsão do tempo e delegar para outros assistentes: edson e pythagoras. '
-    'Nunca tente delegar para si mesmo.'
+    'Nunca tente delegar para si mesmo. '
+    'Você pode limpar seu contexto de conversa e desligar quando solicitado.'
 )
 
 config = {

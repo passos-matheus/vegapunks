@@ -96,6 +96,9 @@ def _deploy_vegapunk(model: Llama, params: SatelliteParams) -> VegapunkSatellite
 
 
 def activate_vegapunk(punk_records: PunkRecords, target_name: str, scale: float = 1.0):
+    if target_name not in punk_records.satellites:
+        raise Exception(f'vegapunk {target_name} não existe')
+
     model = punk_records.model
 
     print(f'ativando o vegapunk {target_name}')

@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+import threading
+from dataclasses import dataclass, field
 from typing import Any
 from llama_cpp import Llama, LlamaState
 
@@ -49,3 +50,4 @@ class PunkRecords:
     adapters_pointers_c_array: Any
     adapters_scales_c_float_array: Any
     current_active: str = None
+    shutdown_event: threading.Event = field(default_factory=threading.Event)

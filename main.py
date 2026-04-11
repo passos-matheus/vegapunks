@@ -109,6 +109,12 @@ async def _pipeline_loop(
 
             if punk_records is not None:
                 await reconsult_satellite(punk_records, transcription, output_queue=tts_output_queue, loop=loop)
+
+                if punk_records.shutdown_event.is_set():
+                    punk_records.shutdown_event.clear()
+                    is_wakeword_active = False
+                    print('shutdown ativado, aguardando wakeword...')
+                    continue
             else:
                 await tts_output_queue.put(transcription)
 
