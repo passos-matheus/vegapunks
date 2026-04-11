@@ -67,24 +67,21 @@ def transcribe_speech_segment(transcription_model, speech_segment_samples):
 
 
 
-def extract_speech_segment(audio_history, total_samples_fed, voice_detection_model, speech_segment_samples):    
+def extract_speech_segment(audio_history, total_samples_fed, voice_detection_model, speech_segment_samples, use_padding=True):
     full_segment = None
-    
-    HISTORY_SECONDS = 30   
+
+    HISTORY_SECONDS = 30
     PADDING_SECONDS = 0.32
     PADDING_SAMPLES = int(PADDING_SECONDS * SAMPLE_RATE)
-    
+
     chunk_start = total_samples_fed
     audio_history.append((chunk_start, speech_segment_samples))
     total_samples_fed += len(speech_segment_samples)
 
-
     cutoff = total_samples_fed - int(HISTORY_SECONDS * SAMPLE_RATE)
 
     while audio_history:
-
         oldest_start, oldest_samples = audio_history[0]
-
         if oldest_start + len(oldest_samples) < cutoff:
             audio_history.popleft()
         else:
@@ -93,38 +90,34 @@ def extract_speech_segment(audio_history, total_samples_fed, voice_detection_mod
     voice_detection_model.accept_waveform(speech_segment_samples)
 
     while not voice_detection_model.empty():
-        
-        segment = voice_detection_model.front                                                                                                                                                                                                                                                                                                         
-        speech = np.array(segment.samples, dtype=np.float32)                                                                                                                                                                                                                                                                        
-        seg_start = segment.start         
+        segment = voice_detection_model.front
+        speech = np.array(segment.samples, dtype=np.float32)
+        seg_start = segment.start
 
-        voice_detection_model.pop()                           
+        voice_detection_model.pop()
+
+        if not use_padding:
+            return speech, total_samples_fed
 
         padding_start = max(0, seg_start - PADDING_SAMPLES)
 
         padding_chunks = []
         for (cs, cs_samples) in audio_history:
-
             ce = cs + len(cs_samples)
-            
             overlap_begin = max(cs, padding_start)
             overlap_end = min(ce, seg_start)
 
             if overlap_begin < overlap_end:
-            
                 local_begin = overlap_begin - cs
                 local_end = overlap_end - cs
-            
                 padding_chunks.append(cs_samples[local_begin:local_end])
 
         if padding_chunks:
-
             prefix = np.concatenate(padding_chunks)
             full_segment = np.concatenate([prefix, speech])
-            
         else:
             full_segment = speech
-            
+
         return full_segment, total_samples_fed
 
     return full_segment, total_samples_fed

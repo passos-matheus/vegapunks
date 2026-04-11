@@ -290,12 +290,12 @@ def consult_satellite(punk_records: PunkRecords, user_message: str, output_queue
                     error, result = _safe_tool_exec(tool_exec['fn'], tool_args, punk_records)
 
                     if error is None:
-                        
+
                         after_text = _format_tool_feedback(tool_exec['after'], tool_args, result=result)
 
                         _send_to_tts(after_text, output_queue, loop, face_queue=punk_records.face_queue)
-                        
-                        target.memory.messages.append({'role': 'tool', 'content': str(result)})
+
+                        reset_vegapunk(punk_records, punk_records.current_active)
 
                     else:
                         

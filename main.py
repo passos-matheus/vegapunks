@@ -1,4 +1,5 @@
 import asyncio
+import numpy as np
 import pyaudio
 import threading
 
@@ -6,7 +7,7 @@ from pathlib import Path
 from collections import deque
 from dataclasses import asdict
 from modules.slm import create_generation_model
-from modules.audio import normalize_to_float_array
+
 from modules.tts import create_speech_synthesis_model
 from modules.face import start_face, send_face
 from modules.wakeword import create_wakeword_model, detect_wakeword_in_speech_segment
@@ -61,23 +62,24 @@ def _create_punk_records():
     return punk_records
 
 
-def _extract_segment(audio_bytes, audio_history, total_samples_fed, voice_detection_model):
-    samples = normalize_to_float_array(audio_bytes)
+def _extract_segment(audio_bytes, audio_history, total_samples_fed, voice_detection_model, use_padding=True):
+    samples = np.frombuffer(audio_bytes, dtype=np.float32)
     segment, new_total = extract_speech_segment(
         audio_history=audio_history,
         total_samples_fed=total_samples_fed,
         voice_detection_model=voice_detection_model,
         speech_segment_samples=samples,
+        use_padding=use_padding,
     )
     return segment, new_total
 
 
 async def _pipeline_loop(
-        stop_flag, 
+        stop_flag,
         audio_input_queue, tts_output_queue, loop,
-        voice_detection_model, wakeword_model, transcription_model, punk_records=None
+        voice_detection_model, wakeword_model, transcription_model, punk_records=None, use_padding=True
     ):
-    
+
     is_wakeword_active = False
     total_samples_fed = 0
     audio_history = deque()
@@ -88,6 +90,7 @@ async def _pipeline_loop(
 
             speech_segment, total_samples_fed = _extract_segment(
                 audio_bytes, audio_history, total_samples_fed, voice_detection_model,
+                use_padding=use_padding,
             )
 
             if speech_segment is None:
@@ -174,6 +177,7 @@ async def run_punk_records_in_test_mode():
             stop_flag, audio_input_queue, tts_output_queue, loop,
             voice_detection_model, wakeword_model, transcription_model,
             punk_records=None,
+            use_padding=False,
         )
     except asyncio.CancelledError:
         print('cancelado.')
@@ -183,4 +187,4 @@ async def run_punk_records_in_test_mode():
 
 
 if __name__ == "__main__":
-    asyncio.run(run_punk_records())
+    asyncio.run(run_punk_records_in_test_mode())
