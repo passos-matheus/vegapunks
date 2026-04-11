@@ -1,4 +1,5 @@
 import os
+import time
 import pyaudio
 import asyncio
 import threading
@@ -95,6 +96,7 @@ async def _pipeline_loop(
         try:
             audio_bytes = await audio_input_queue.get()
 
+            t0 = time.perf_counter()
             speech_segment, total_samples_fed = _extract_segment(
                 audio_bytes, audio_history, total_samples_fed, voice_detection_model,
                 use_padding=use_padding,
@@ -102,11 +104,17 @@ async def _pipeline_loop(
 
             if speech_segment is None:
                 continue
-            
+
+            t_vad = time.perf_counter()
+            dur = len(speech_segment) / 16000
+            print(f'[timer] vad: {(t_vad - t0)*1000:.0f}ms | segmento: {dur:.2f}s')
+
             if not is_wakeword_active:
+                t1 = time.perf_counter()
                 is_wakeword_active = await loop.run_in_executor(
                     None, detect_wakeword_in_speech_segment, wakeword_model, speech_segment
                 )
+                print(f'[timer] wakeword: {(time.perf_counter() - t1)*1000:.0f}ms')
 
                 if not is_wakeword_active:
                     continue
@@ -116,15 +124,19 @@ async def _pipeline_loop(
                 await tts_output_queue.put('E aí, mestre!')
                 continue
 
+            t2 = time.perf_counter()
             transcription = await loop.run_in_executor(
                 None, transcribe_speech_segment, transcription_model, speech_segment
             )
+            print(f'[timer] stt: {(time.perf_counter() - t2)*1000:.0f}ms')
 
             print(f'transcrição: {transcription}')
 
             if punk_records is not None:
                 send_face(punk_records.face_queue, "state", "thinking")
+                t3 = time.perf_counter()
                 await reconsult_satellite(punk_records, transcription, output_queue=tts_output_queue, loop=loop)
+                print(f'[timer] slm: {(time.perf_counter() - t3)*1000:.0f}ms')
                 send_face(punk_records.face_queue, "state", "listening")
 
                 if punk_records.shutdown_event.is_set():

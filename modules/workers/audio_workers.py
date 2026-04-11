@@ -1,9 +1,8 @@
+import time
 import asyncio
 import pyaudio
-import collections
-import numpy as np
 
-from modules.stt import create_voice_detection_model, create_transcription_model, transcribe_speech_segment
+
 from modules.tts import sintetize_speech_segment
 
 format = pyaudio.paFloat32
@@ -62,7 +61,9 @@ async def audio_producer_worker(so_audio_resources: pyaudio.PyAudio, stop_flag, 
             sentence = await _sentences_queue.get()
             print(f'[tts sentence] {sentence}')
 
+            t0 = time.perf_counter()
             audio_sentence = await loop.run_in_executor(None, sintetize_speech_segment, tts_model, sentence)
+            print(f'[timer] tts synth: {(time.perf_counter() - t0)*1000:.0f}ms | "{sentence[:40]}"')
 
             await loop.run_in_executor(None, _audio_output_stream.write, audio_sentence.tobytes())
             

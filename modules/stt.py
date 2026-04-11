@@ -17,7 +17,7 @@ VAD_MODEL = str(BASE_DIR / "core/models/vad/silero_vad.onnx")
 HOTWORDS_FILE = str(BASE_DIR / "core/models/asr/hotwords.txt")
 
 ASR_NUM_THREADS = int(os.environ.get("ASR_NUM_THREADS", 2))
-VAD_NUM_THREADS = int(os.environ.get("VAD_NUM_THREADS", 1))
+VAD_NUM_THREADS = int(os.environ.get("VAD_NUM_THREADS", 2))
 VAD_THRESHOLD = float(os.environ.get("VAD_THRESHOLD", 0.5))
 VAD_MIN_SILENCE = float(os.environ.get("VAD_MIN_SILENCE", 0.4))
 VAD_MIN_SPEECH = float(os.environ.get("VAD_MIN_SPEECH", 0.20))

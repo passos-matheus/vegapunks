@@ -17,19 +17,18 @@ ADAPTERS_DIR = f"{MODEL_DIR}/lora_adapters"
 MODEL_PATH = f"{MODEL_DIR}/Qwen3-0.6B-Q8_0.gguf"
 
 N_CTX = int(os.environ.get("SLM_N_CTX", 2048))
-N_THREADS = int(os.environ.get("SLM_N_THREADS", 3))
-N_THREADS_BATCH = int(os.environ.get("SLM_N_THREADS_BATCH", 3))
+_n_threads_raw = os.environ.get("SLM_N_THREADS")
+N_THREADS = int(_n_threads_raw) if _n_threads_raw else None
+_n_threads_batch_raw = os.environ.get("SLM_N_THREADS_BATCH")
+N_THREADS_BATCH = int(_n_threads_batch_raw) if _n_threads_batch_raw else None
 N_BATCH = int(os.environ.get("SLM_N_BATCH", 512))
 N_UBATCH = int(os.environ.get("SLM_N_UBATCH", 512))
-USE_MMAP = os.environ.get("SLM_USE_MMAP", "true").lower() == "true"
-USE_MLOCK = os.environ.get("SLM_USE_MLOCK", "true").lower() == "true"
+USE_MMAP = os.environ.get("SLM_USE_MMAP", "false").lower() == "true"
+USE_MLOCK = os.environ.get("SLM_USE_MLOCK", "false").lower() == "true"
 VERBOSE = os.environ.get("SLM_VERBOSE", "false").lower() == "true"
 
 
 def create_generation_model(path: str = MODEL_PATH):
-
-    print(f'rodando a a inferência do slm com {N_THREADS} threads, com use_mlock {USE_MLOCK} e use_mmap {USE_MMAP}.')
-
     return Llama(
         model_path=path,
         n_ctx=N_CTX,
