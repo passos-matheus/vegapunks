@@ -1,3 +1,6 @@
+from core.punk_records.dataclasses import VegapunkPresentation
+
+
 def get_weather(args, punk_records):
     city = args['city']
     return f"25 graus celsius em {city}"
@@ -118,6 +121,18 @@ system_prompt = (
     'Você pode limpar seu contexto de conversa e desligar quando solicitado.'
 )
 
+appearance = VegapunkPresentation(
+    eyelid_color=(120, 120, 120),
+    mouth_color=(0, 0, 0),
+    eye_width=150,
+    eye_height=150,
+    eye_distance=110,
+    eye_y_offset=-75,
+    iris_radius=14,
+    base_eyelid=45,
+    has_mouth=False,
+)
+
 config = {
     'name': 'pythagoras',
     'adapter_directory': 'pythagoras',
@@ -125,4 +140,5 @@ config = {
     'system_prompt': system_prompt,
     'tools': tools,
     'tools_exec': tools_exec,
+    'appearance': appearance,
 }

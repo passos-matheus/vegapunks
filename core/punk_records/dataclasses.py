@@ -36,6 +36,23 @@ class SatelliteKnowledge:
 
 
 @dataclass
+class VegapunkPresentation:
+    eyelid_color: tuple
+    mouth_color: tuple
+    eye_width: float
+    eye_height: float
+    eye_distance: float
+    eye_y_offset: float
+    iris_radius: float
+    base_eyelid: float
+    has_mouth: bool
+    eye_color: tuple = (255, 255, 255)
+    iris_color: tuple = (0, 0, 0)
+    background_color: tuple = (10, 10, 10)
+    voice_id: str = None
+
+
+@dataclass
 class VegapunkSatellite:
     name: str
     skills: SatelliteSkills
@@ -51,3 +68,4 @@ class PunkRecords:
     adapters_scales_c_float_array: Any
     current_active: str = None
     shutdown_event: threading.Event = field(default_factory=threading.Event)
+    face_queue: Any = None
