@@ -64,7 +64,7 @@ async def audio_producer_worker(so_audio_resources: pyaudio.PyAudio, stop_flag, 
 
             audio_sentence = await loop.run_in_executor(None, sintetize_speech_segment, tts_model, sentence)
 
-            _audio_output_stream.write(audio_sentence.tobytes())
+            await loop.run_in_executor(None, _audio_output_stream.write, audio_sentence.tobytes())
             
         except OSError:
             print('stream de output cancelado manualmente')

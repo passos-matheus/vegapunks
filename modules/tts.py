@@ -1,13 +1,15 @@
+import os
 import numpy as np
 import sherpa_onnx
 
 
-from math import gcd           
+from math import gcd
 from pathlib import Path
-from scipy.signal import resample_poly                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
-                         
+from scipy.signal import resample_poly
 
-SPEED = 1.0
+
+SPEED = float(os.environ.get("TTS_SPEED", 1.0))
+TTS_NUM_THREADS = int(os.environ.get("TTS_NUM_THREADS", 2))
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -36,7 +38,7 @@ def create_speech_synthesis_model():
             vits=sherpa_onnx.OfflineTtsVitsModelConfig(
                 model=MODEL_PATH, tokens=TOKENS_PATH, data_dir=DATA_DIR,
             ),
-            provider="cpu", num_threads=2,
+            provider="cpu", num_threads=TTS_NUM_THREADS,
         )
     )
     

@@ -1,9 +1,13 @@
+import re
+import os
+import json
 import ctypes
 import hashlib
-import json
+
+
 from pathlib import Path
-import re
 from llama_cpp import llama_set_adapters_lora, llama_adapter_lora_init, Llama
+
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -12,13 +16,31 @@ MODEL_DIR = str(BASE_DIR / "core/models/slm/qwen-3-0.6B")
 ADAPTERS_DIR = f"{MODEL_DIR}/lora_adapters"
 MODEL_PATH = f"{MODEL_DIR}/Qwen3-0.6B-Q8_0.gguf"
 
- 
-def create_generation_model(path: str = MODEL_PATH, n_ctx: int = 2048):
+N_CTX = int(os.environ.get("SLM_N_CTX", 2048))
+N_THREADS = int(os.environ.get("SLM_N_THREADS", 3))
+N_THREADS_BATCH = int(os.environ.get("SLM_N_THREADS_BATCH", 3))
+N_BATCH = int(os.environ.get("SLM_N_BATCH", 512))
+N_UBATCH = int(os.environ.get("SLM_N_UBATCH", 512))
+USE_MMAP = os.environ.get("SLM_USE_MMAP", "true").lower() == "true"
+USE_MLOCK = os.environ.get("SLM_USE_MLOCK", "true").lower() == "true"
+VERBOSE = os.environ.get("SLM_VERBOSE", "false").lower() == "true"
+
+
+def create_generation_model(path: str = MODEL_PATH):
+
+    print(f'rodando a a inferência do slm com {N_THREADS} threads, com use_mlock {USE_MLOCK} e use_mmap {USE_MMAP}.')
+
     return Llama(
-    model_path=path,
-    n_ctx=n_ctx,
-    verbose=False,
-)
+        model_path=path,
+        n_ctx=N_CTX,
+        n_batch=N_BATCH,
+        n_ubatch=N_UBATCH,
+        n_threads=N_THREADS,
+        n_threads_batch=N_THREADS_BATCH,
+        use_mmap=USE_MMAP,
+        use_mlock=USE_MLOCK,
+        verbose=VERBOSE,
+    )
 
 def generate(messages: list, model: Llama, strean: bool = True):
     return model.create_chat_completion(messages=messages, stream=strean, max_tokens=256)

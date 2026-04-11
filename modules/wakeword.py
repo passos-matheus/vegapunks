@@ -1,12 +1,12 @@
+import os
+
+
 import numpy as np
-
-
 from pathlib import Path
 from openwakeword.model import Model
 
 
- 
-THRESHOLD = 0.5
+THRESHOLD = float(os.environ.get("WAKEWORD_THRESHOLD", 0.5))
 SAMPLE_RATE = 16000
 CHUNK_SAMPLES = 1280  
 

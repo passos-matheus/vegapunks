@@ -1,33 +1,40 @@
-import asyncio
-import numpy as np
+import os
 import pyaudio
+import asyncio
 import threading
+import numpy as np
+
 
 from pathlib import Path
 from collections import deque
 from dataclasses import asdict
-from modules.slm import create_generation_model
-
-from modules.tts import create_speech_synthesis_model
 from modules.face import start_face, send_face
-from modules.wakeword import create_wakeword_model, detect_wakeword_in_speech_segment
-from core.punk_records import start_punk_records, reconsult_satellite, activate_vegapunk
+from modules.slm import create_generation_model
+from modules.tts import create_speech_synthesis_model
 from core.punk_records.satellites import vegapunks as vp_configs
+from modules.wakeword import create_wakeword_model, detect_wakeword_in_speech_segment
 from modules.workers.audio_workers import audio_consumer_worker, audio_producer_worker
+from core.punk_records import start_punk_records, reconsult_satellite, activate_vegapunk
 from modules.stt import create_voice_detection_model, create_transcription_model, transcribe_speech_segment, extract_speech_segment
+
+
 
 frames_amount = 1024
 
 BASE_DIR = Path(__file__).resolve().parent
 MODEL_DIR = str(BASE_DIR / "core/models/slm/qwen-3-0.6B")
+
 ADAPTERS_DIR = f"{MODEL_DIR}/lora_adapters"
+
+VEGAPUNK_MODE = os.environ.get("VEGAPUNK_MODE", "normal")
+VAD_USE_PADDING = os.environ.get("VAD_USE_PADDING", "true").lower() == "true"
 
 
 def _create_audio_resources():
     so = pyaudio.PyAudio()
     stop_flag = threading.Event()
-    audio_input_queue = asyncio.Queue()
-    tts_output_queue = asyncio.Queue()
+    audio_input_queue = asyncio.Queue(maxsize=100)
+    tts_output_queue = asyncio.Queue(maxsize=20)
     return so, stop_flag, audio_input_queue, tts_output_queue
 
 
@@ -97,9 +104,11 @@ async def _pipeline_loop(
                 continue
             
             if not is_wakeword_active:
-                is_wakeword_active = detect_wakeword_in_speech_segment(wakeword_model, speech_segment)
-                
-                if not is_wakeword_active: 
+                is_wakeword_active = await loop.run_in_executor(
+                    None, detect_wakeword_in_speech_segment, wakeword_model, speech_segment
+                )
+
+                if not is_wakeword_active:
                     continue
 
                 print('wakeword detectadaa')
@@ -107,9 +116,8 @@ async def _pipeline_loop(
                 await tts_output_queue.put('E aí, mestre!')
                 continue
 
-            transcription = transcribe_speech_segment(
-                speech_segment_samples=speech_segment,
-                transcription_model=transcription_model,
+            transcription = await loop.run_in_executor(
+                None, transcribe_speech_segment, transcription_model, speech_segment
             )
 
             print(f'transcrição: {transcription}')
@@ -177,7 +185,7 @@ async def run_punk_records_in_test_mode():
             stop_flag, audio_input_queue, tts_output_queue, loop,
             voice_detection_model, wakeword_model, transcription_model,
             punk_records=None,
-            use_padding=False,
+            use_padding=VAD_USE_PADDING,
         )
     except asyncio.CancelledError:
         print('cancelado.')
@@ -187,4 +195,7 @@ async def run_punk_records_in_test_mode():
 
 
 if __name__ == "__main__":
-    asyncio.run(run_punk_records_in_test_mode())
+    if VEGAPUNK_MODE == "test":
+        asyncio.run(run_punk_records_in_test_mode())
+    else:
+        asyncio.run(run_punk_records())
