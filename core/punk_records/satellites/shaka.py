@@ -124,12 +124,12 @@ system_prompt = (
 appearance = VegapunkPresentation(
     eyelid_color=(100, 150, 255),
     mouth_color=(0, 0, 0),
-    eye_width=130,
-    eye_height=80,
-    eye_distance=130,
-    eye_y_offset=-85,
-    iris_radius=16,
-    base_eyelid=35,
+    eye_width=150,
+    eye_height=150,
+    eye_distance=110,
+    eye_y_offset=-75,
+    iris_radius=14,
+    base_eyelid=45,
     has_mouth=False,
 )
 
