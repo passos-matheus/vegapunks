@@ -63,6 +63,7 @@ def _create_vegapunk_satelite(params: SatelliteParams, memory_state: LlamaState,
         memory=memory,
         knowledge=knowledge,
         skills=skills,
+        presentation=params.appearance,
     )
 
 
@@ -180,6 +181,7 @@ def start_punk_records(model: Llama, adapters_path: str):
             tools_exec=cfg['tools_exec'],
             system_prompt=cfg['system_prompt'],
             adapter_path=f"{adapters_path}/{cfg['adapter_directory']}/{cfg['adapter_name']}.gguf",
+            appearance=cfg.get('appearance'),
         ) for cfg in vegapunks
     ]
 
@@ -205,9 +207,24 @@ def _format_tool_feedback(template, tool_args, result=None):
         format_args['result'] = result
     return template.format(**format_args)
 
-def _send_to_tts(text, output_queue, loop, face_queue=None):
+def _voice_params_for(punk_records):
+    if punk_records is None or punk_records.current_active is None:
+        return None
+
+    target = punk_records.satellites.get(punk_records.current_active)
+    if target is None or target.presentation is None:
+        return None
+
+    return {
+        'pitch': target.presentation.voice_pitch_semitones,
+        'speed': target.presentation.voice_speed,
+    }
+
+
+def _send_to_tts(text, output_queue, loop, punk_records=None, face_queue=None):
     if output_queue is not None and loop is not None:
-        asyncio.run_coroutine_threadsafe(output_queue.put(text), loop)
+        voice_params = _voice_params_for(punk_records)
+        asyncio.run_coroutine_threadsafe(output_queue.put((text, voice_params)), loop)
     else:
         print(text)
     if face_queue is not None:
@@ -285,7 +302,7 @@ def consult_satellite(punk_records: PunkRecords, user_message: str, output_queue
 
                 if tool_exec:
                     before_text = _format_tool_feedback(tool_exec['before'], tool_args)
-                    _send_to_tts(before_text, output_queue, loop, face_queue=punk_records.face_queue)
+                    _send_to_tts(before_text, output_queue, loop, punk_records=punk_records, face_queue=punk_records.face_queue)
 
                     error, result = _safe_tool_exec(tool_exec['fn'], tool_args, punk_records)
 
@@ -293,15 +310,15 @@ def consult_satellite(punk_records: PunkRecords, user_message: str, output_queue
 
                         after_text = _format_tool_feedback(tool_exec['after'], tool_args, result=result)
 
-                        _send_to_tts(after_text, output_queue, loop, face_queue=punk_records.face_queue)
+                        _send_to_tts(after_text, output_queue, loop, punk_records=punk_records, face_queue=punk_records.face_queue)
 
                         reset_vegapunk(punk_records, punk_records.current_active)
 
                     else:
-                        
+
                         error_text = _format_tool_feedback(tool_exec['error'], tool_args)
-                        
-                        _send_to_tts(error_text, output_queue, loop, face_queue=punk_records.face_queue)
+
+                        _send_to_tts(error_text, output_queue, loop, punk_records=punk_records, face_queue=punk_records.face_queue)
 
                         target.memory.messages.append({'role': 'tool', 'content': f'error: {error}'})
                         target.memory.messages.append({'role': 'user', 'content': f'a tool retornou um erro: {error}'})
@@ -313,7 +330,7 @@ def consult_satellite(punk_records: PunkRecords, user_message: str, output_queue
             return 'tool_call', tool_data
 
         else:
-            _, extra_raw = process_generate(stripped, chunks, on_sentence=lambda text: _send_to_tts(text, output_queue, loop, face_queue=punk_records.face_queue))
+            _, extra_raw = process_generate(stripped, chunks, on_sentence=lambda text: _send_to_tts(text, output_queue, loop, punk_records=punk_records, face_queue=punk_records.face_queue))
             raw += extra_raw
             cleaned = (after_think + extra_raw).strip()
             target.memory.messages.append({'role': 'assistant', 'content': raw})
@@ -340,5 +357,5 @@ async def reconsult_satellite(punk_records: PunkRecords, user_message: str, outp
 
     target_name = punk_records.current_active
     reset_vegapunk(punk_records, target_name)
-    _send_to_tts('realmente não consegui realizar essa ação', output_queue, loop, face_queue=punk_records.face_queue)
+    _send_to_tts('realmente não consegui realizar essa ação', output_queue, loop, punk_records=punk_records, face_queue=punk_records.face_queue)
     return 'error', None

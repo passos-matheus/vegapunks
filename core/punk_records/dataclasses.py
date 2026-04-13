@@ -11,6 +11,7 @@ class SatelliteParams:
     tools_exec: dict
     adapter_path: str
     system_prompt: str
+    appearance: Any = None
 
 
 @dataclass
@@ -50,6 +51,8 @@ class VegapunkPresentation:
     iris_color: tuple = (0, 0, 0)
     background_color: tuple = (10, 10, 10)
     voice_id: str = None
+    voice_pitch_semitones: float = 0.0
+    voice_speed: float = 1.0
 
 
 @dataclass
@@ -58,6 +61,7 @@ class VegapunkSatellite:
     skills: SatelliteSkills
     memory: SatelliteMemory
     knowledge: SatelliteKnowledge
+    presentation: VegapunkPresentation = None
 
 
 @dataclass

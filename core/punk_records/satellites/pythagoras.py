@@ -131,6 +131,8 @@ appearance = VegapunkPresentation(
     iris_radius=14,
     base_eyelid=45,
     has_mouth=False,
+    voice_pitch_semitones=-4.0,
+    voice_speed=0.95,
 )
 
 config = {
