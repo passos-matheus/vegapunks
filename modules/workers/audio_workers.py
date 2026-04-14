@@ -15,40 +15,71 @@ frames_amount = 1024
 RATE_CANDIDATES = (16000, 48000, 44100)
 
 
-def pick_supported_rate(pa: pyaudio.PyAudio, is_input: bool, candidates=RATE_CANDIDATES) -> int:
+def _default_device_index(pa: pyaudio.PyAudio, is_input: bool) -> int:
     host_info = pa.get_default_host_api_info()
-    device_index = host_info['defaultInputDevice'] if is_input else host_info['defaultOutputDevice']
+    return host_info['defaultInputDevice'] if is_input else host_info['defaultOutputDevice']
+
+
+def resolve_device_index(pa: pyaudio.PyAudio, value, is_input: bool):
+    if value is None or value == '':
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        pass
+
+    needle = str(value).lower()
+    channel_key = 'maxInputChannels' if is_input else 'maxOutputChannels'
+    for i in range(pa.get_device_count()):
+        info = pa.get_device_info_by_index(i)
+        if info[channel_key] > 0 and needle in info['name'].lower():
+            return i
+
+    raise ValueError(f'nenhum device de {"entrada" if is_input else "saída"} com "{value}" no nome')
+
+
+def pick_supported_rate(pa: pyaudio.PyAudio, is_input: bool, device_index=None, candidates=RATE_CANDIDATES) -> int:
+    resolved_index = device_index if device_index is not None else _default_device_index(pa, is_input)
 
     for rate in candidates:
         try:
-            kwargs = {'rate': rate, 'input_format' if is_input else 'output_format': format}
+            probe_kwargs = dict(
+                format=format,
+                channels=channels,
+                rate=rate,
+                frames_per_buffer=1024,
+            )
             if is_input:
-                kwargs['input_device'] = device_index
-                kwargs['input_channels'] = channels
+                probe_kwargs['input'] = True
+                probe_kwargs['input_device_index'] = resolved_index
             else:
-                kwargs['output_device'] = device_index
-                kwargs['output_channels'] = channels
+                probe_kwargs['output'] = True
+                probe_kwargs['output_device_index'] = resolved_index
 
-            if pa.is_format_supported(**kwargs):
-                print(f'[audio] {"input" if is_input else "output"} rate escolhida: {rate} Hz')
-                return rate
-        except ValueError:
+            probe_stream = pa.open(**probe_kwargs)
+            probe_stream.close()
+            print(f'[audio] {"input" if is_input else "output"} rate escolhida: {rate} Hz (device {resolved_index})')
+            return rate
+        except Exception:
             continue
 
     print(f'[audio] nenhuma taxa suportada encontrada, caindo no default 16000')
     return 16000
 
 
-def audio_consumer_worker(so_audio_resources: pyaudio.PyAudio, stop_flag, number_of_frames_to_be_read, audio_bytes_queue, loop, input_rate: int = asr_rate):
-    try:
-        _audio_bytes_input_stream = so_audio_resources.open(
-            format=format,
-            channels=channels,
-            rate=input_rate,
-            frames_per_buffer=number_of_frames_to_be_read,
-            input=True
-        )
+def audio_consumer_worker(so_audio_resources: pyaudio.PyAudio, stop_flag, number_of_frames_to_be_read, audio_bytes_queue, loop, input_rate: int = asr_rate, input_device_index=None):
+    open_kwargs = dict(
+        format=format,
+        channels=channels,
+        rate=input_rate,
+        frames_per_buffer=number_of_frames_to_be_read,
+        input=True,
+    )
+    if input_device_index is not None:
+        open_kwargs['input_device_index'] = input_device_index
 
+    try:
+        _audio_bytes_input_stream = so_audio_resources.open(**open_kwargs)
     except:
         raise
 
@@ -74,18 +105,20 @@ def audio_consumer_worker(so_audio_resources: pyaudio.PyAudio, stop_flag, number
             break
 
 
-async def audio_producer_worker(so_audio_resources: pyaudio.PyAudio, stop_flag, _sentences_queue, tts_model, output_rate: int = asr_rate):
+async def audio_producer_worker(so_audio_resources: pyaudio.PyAudio, stop_flag, _sentences_queue, tts_model, output_rate: int = asr_rate, output_device_index=None):
+    open_kwargs = dict(
+        format=format,
+        channels=channels,
+        rate=output_rate,
+        frames_per_buffer=frames_amount,
+        output=True,
+    )
+    if output_device_index is not None:
+        open_kwargs['output_device_index'] = output_device_index
+
     try:
         loop = asyncio.get_running_loop()
-
-        _audio_output_stream = so_audio_resources.open(
-            format=format,
-            channels=channels,
-            rate=output_rate,
-            frames_per_buffer=frames_amount,
-            output=True
-        )
-
+        _audio_output_stream = so_audio_resources.open(**open_kwargs)
     except:
         raise
 
