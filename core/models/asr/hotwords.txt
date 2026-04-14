@@ -7,6 +7,10 @@ encerrar :4.0
 parar revisão :4.0
 parar :4.0
 pix :4.0
+Shaka :4.0
+Pythagoras :4.0
+Edson :4.0
+Vegapunk :4.0
 
 
 

@@ -7,7 +7,7 @@ import multiprocessing
 
 
 REF_W, REF_H = 800, 480
-MAX_W, MAX_H = 800, 480
+MAX_W, MAX_H = 1920, 1080
 FPS = 60
 
 COR_FUNDO = (10, 10, 10)

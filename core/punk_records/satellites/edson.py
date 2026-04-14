@@ -1,9 +1,16 @@
 from core.punk_records.dataclasses import VegapunkPresentation
 
 
-def get_weather(args, punk_records):
-    city = args['city']
-    return f"25 graus celsius em {city}"
+STUDIES = [
+    'Arquitetura de Redes',
+    'Tilling',
+    'Linguagens formais e automatos',
+    'álgebra linear',
+]
+
+
+def list_studies(args, punk_records):
+    return ', '.join(STUDIES)
 
 
 def switch_satellite(args, punk_records):
@@ -29,17 +36,12 @@ tools = [
     {
         "type": "function",
         "function": {
-            "name": "get_weather",
-            "description": "Retorna a previsão do tempo para uma cidade específica.",
+            "name": "list_studies",
+            "description": "Lista os últimos estudos do usuário.",
             "parameters": {
                 "type": "object",
-                "properties": {
-                    "city": {
-                        "type": "string",
-                        "description": "Nome da cidade, ex: 'São Paulo'"
-                    }
-                },
-                "required": ["city"]
+                "properties": {},
+                "required": []
             }
         }
     },
@@ -88,11 +90,11 @@ tools = [
 ]
 
 tools_exec = {
-    'get_weather': {
-        'fn': get_weather,
-        'before': 'consultando a previsão do tempo em {city}, aguarde um instante!',
-        'after': 'a previsão do tempo é {result}',
-        'error': 'não consegui consultar o tempo em {city}, deixa eu tentar de ovo',
+    'list_studies': {
+        'fn': list_studies,
+        'before': 'deixa eu olhar os últimos estudos...',
+        'after': 'seus últimos estudos foram: {result}',
+        'error': 'não consegui buscar os últimos estudos',
     },
     'switch_satellite': {
         'fn': switch_satellite,
@@ -116,7 +118,8 @@ tools_exec = {
 
 system_prompt = (
     'Você é o Edson, fala somente português brasileiro. '
-    'Você pode consultar a previsão do tempo e delegar para outros assistentes: shaka e pythagoras. '
+    'Você é focado em estudos: ajuda o usuário a lembrar e revisar o que ele tem estudado. '
+    'Pode listar os últimos estudos e delegar para outros assistentes: shaka (planejamento) e pythagoras (revisões). '
     'Nunca tente delegar para si mesmo. '
     'Você pode limpar seu contexto de conversa e desligar quando solicitado.'
 )
@@ -143,4 +146,5 @@ config = {
     'tools': tools,
     'tools_exec': tools_exec,
     'appearance': appearance,
+    'adapter_scale': 0.1,
 }

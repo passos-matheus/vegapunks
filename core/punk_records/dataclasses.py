@@ -12,6 +12,7 @@ class SatelliteParams:
     adapter_path: str
     system_prompt: str
     appearance: Any = None
+    adapter_scale: float = 1.0
 
 
 @dataclass
@@ -34,6 +35,7 @@ class SatelliteKnowledge:
     is_active: bool
     current_scale: float
     knowledge_c_pointer: Any
+    configured_scale: float = 1.0
 
 
 @dataclass

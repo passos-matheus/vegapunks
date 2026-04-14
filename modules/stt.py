@@ -34,6 +34,8 @@ def create_transcription_model():
         bpe_vocab=f"{ASR_MODEL_DIR}/bpe.vocab",
         num_threads=ASR_NUM_THREADS,
         decoding_method="modified_beam_search",
+        hotwords_file=HOTWORDS_FILE,
+        hotwords_score=2.0,
     )
 
 

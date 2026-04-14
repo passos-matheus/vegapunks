@@ -1,9 +1,16 @@
 from core.punk_records.dataclasses import VegapunkPresentation
 
 
-def get_weather(args, punk_records):
-    city = args['city']
-    return f"25 graus celsius em {city}"
+REVISIONS = [
+    'Arquitetura de Redes, gRPC',
+    'Tilling, como fazer os pesos caberem na L1 do processador',
+    'O que é um automato',
+    'Mínimo de uma função',
+]
+
+
+def list_revisions(args, punk_records):
+    return ', '.join(REVISIONS)
 
 
 def switch_satellite(args, punk_records):
@@ -29,17 +36,12 @@ tools = [
     {
         "type": "function",
         "function": {
-            "name": "get_weather",
-            "description": "Retorna a previsão do tempo para uma cidade específica.",
+            "name": "list_revisions",
+            "description": "Lista as últimas revisões feitas pelo usuário.",
             "parameters": {
                 "type": "object",
-                "properties": {
-                    "city": {
-                        "type": "string",
-                        "description": "Nome da cidade, ex: 'São Paulo'"
-                    }
-                },
-                "required": ["city"]
+                "properties": {},
+                "required": []
             }
         }
     },
@@ -88,11 +90,11 @@ tools = [
 ]
 
 tools_exec = {
-    'get_weather': {
-        'fn': get_weather,
-        'before': 'consultando a previsão do tempo em {city}, aguarde um instante!',
-        'after': 'a previsão do tempo é {result}',
-        'error': 'não consegui consultar o tempo em {city}, deixa eu tentar de ovo',
+    'list_revisions': {
+        'fn': list_revisions,
+        'before': 'deixa eu buscar as últimas revisões...',
+        'after': 'suas últimas revisões foram: {result}',
+        'error': 'não consegui buscar as revisões',
     },
     'switch_satellite': {
         'fn': switch_satellite,
@@ -116,7 +118,8 @@ tools_exec = {
 
 system_prompt = (
     'Você é o Pythagoras, fala somente português brasileiro. '
-    'Você pode consultar a previsão do tempo e delegar para outros assistentes: edson e shaka. '
+    'Você é focado em revisões: ajuda o usuário a lembrar o que já revisou recentemente. '
+    'Pode listar as últimas revisões e delegar para outros assistentes: edson (estudos) e shaka (planejamento). '
     'Nunca tente delegar para si mesmo. '
     'Você pode limpar seu contexto de conversa e desligar quando solicitado.'
 )
@@ -143,4 +146,5 @@ config = {
     'tools': tools,
     'tools_exec': tools_exec,
     'appearance': appearance,
+    'adapter_scale': 0.1,
 }

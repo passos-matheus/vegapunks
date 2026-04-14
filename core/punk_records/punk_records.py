@@ -56,6 +56,7 @@ def _create_vegapunk_satelite(params: SatelliteParams, memory_state: LlamaState,
         is_active=False,
         knowledge_c_pointer=adapter_c_pointer,
         current_scale=scale_c_float_array[-1],
+        configured_scale=params.adapter_scale,
     )
 
     return VegapunkSatellite(
@@ -107,7 +108,7 @@ def _deploy_vegapunk(model: Llama, params: SatelliteParams) -> VegapunkSatellite
 
     adapter_pointer_c_array, scale_c_float_array = initialize_adapters(model.ctx, [adapter_c_pointer])
 
-    active_adapter(model.ctx, params.name, [(params.name, adapter_c_pointer)], adapter_pointer_c_array, scale_c_float_array, personalized_scale=1.0)
+    active_adapter(model.ctx, params.name, [(params.name, adapter_c_pointer)], adapter_pointer_c_array, scale_c_float_array, personalized_scale=params.adapter_scale)
 
     memory_state = _load_memory_and_get_state(model, params)
 
@@ -120,13 +121,16 @@ def _deploy_vegapunk(model: Llama, params: SatelliteParams) -> VegapunkSatellite
     )
 
 
-def activate_vegapunk(punk_records: PunkRecords, target_name: str, scale: float = 1.0):
+def activate_vegapunk(punk_records: PunkRecords, target_name: str, scale: float = None):
     if target_name not in punk_records.satellites:
         raise Exception(f'vegapunk {target_name} não existe')
 
     model = punk_records.model
 
-    print(f'ativando o vegapunk {target_name}')
+    if scale is None:
+        scale = punk_records.satellites[target_name].knowledge.configured_scale
+
+    print(f'ativando o vegapunk {target_name} (scale={scale})')
 
     if punk_records.current_active is not None:
         current = punk_records.satellites[punk_records.current_active]
@@ -182,6 +186,7 @@ def start_punk_records(model: Llama, adapters_path: str):
             system_prompt=cfg['system_prompt'],
             adapter_path=f"{adapters_path}/{cfg['adapter_directory']}/{cfg['adapter_name']}.gguf",
             appearance=cfg.get('appearance'),
+            adapter_scale=cfg.get('adapter_scale', 1.0),
         ) for cfg in vegapunks
     ]
 
