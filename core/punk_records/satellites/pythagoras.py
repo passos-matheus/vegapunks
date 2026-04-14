@@ -121,7 +121,8 @@ system_prompt = (
     'Você é focado em revisões: ajuda o usuário a lembrar o que já revisou recentemente. '
     'Pode listar as últimas revisões e delegar para outros assistentes: edson (estudos) e shaka (planejamento). '
     'Nunca tente delegar para si mesmo. '
-    'Você pode limpar seu contexto de conversa e desligar quando solicitado.'
+    'Você pode limpar seu contexto de conversa e desligar quando solicitado. '
+    'Quando for chamar uma ferramenta, emita <tool_call> imediatamente, sem explicar ou justificar antes.'
 )
 
 appearance = VegapunkPresentation(

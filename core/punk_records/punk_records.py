@@ -8,16 +8,13 @@ from llama_cpp import Llama, LlamaState
 
 from modules.slm import (
     create_user_message,
-    identify_mode,
     load_adapter_in_memory,
     initialize_adapters,
     active_adapter,
     desactive_adapters,
     create_system_message,
     compute_state_hash,
-    process_generate,
-    process_think,
-    process_tool,
+    process_stream,
 )
 
 from core.punk_records.dataclasses import (
@@ -269,80 +266,46 @@ def consult_satellite(punk_records: PunkRecords, user_message: str, output_queue
         stream=True,
     )
 
-    raw = ""
-    after_think = ""
-    think_done = False
+    on_sentence = lambda text: _send_to_tts(
+        text, output_queue, loop,
+        punk_records=punk_records, face_queue=punk_records.face_queue,
+    )
 
-    for chunk in chunks:
-        delta = chunk['choices'][0]['delta']
-        if 'content' not in delta or not delta['content']:
-            continue
-
-        token = delta['content']
-        raw += token
-
-        if not think_done:
-            if '</think>' in raw:
-                think_done = True
-                _, after_think = process_think(raw)
-            continue
-
-        after_think += token
-        stripped = after_think.strip()
-
-        if not stripped:
-            continue
-
-        mode = identify_mode(stripped)
-
-        if mode == 'tool':
-            tool_data, extra_raw = process_tool(after_think, chunks)
-            raw += extra_raw
-            target.memory.messages.append({'role': 'assistant', 'content': raw})
-
-            if tool_data is not None:
-                tool_name = tool_data['name']
-                tool_args = tool_data['arguments']
-                tool_exec = target.skills.tools_exec.get(tool_name)
-
-                if tool_exec:
-                    before_text = _format_tool_feedback(tool_exec['before'], tool_args)
-                    _send_to_tts(before_text, output_queue, loop, punk_records=punk_records, face_queue=punk_records.face_queue)
-
-                    error, result = _safe_tool_exec(tool_exec['fn'], tool_args, punk_records)
-
-                    if error is None:
-
-                        after_text = _format_tool_feedback(tool_exec['after'], tool_args, result=result)
-
-                        _send_to_tts(after_text, output_queue, loop, punk_records=punk_records, face_queue=punk_records.face_queue)
-
-                        reset_vegapunk(punk_records, punk_records.current_active)
-
-                    else:
-
-                        error_text = _format_tool_feedback(tool_exec['error'], tool_args)
-
-                        _send_to_tts(error_text, output_queue, loop, punk_records=punk_records, face_queue=punk_records.face_queue)
-
-                        target.memory.messages.append({'role': 'tool', 'content': f'error: {error}'})
-                        target.memory.messages.append({'role': 'user', 'content': f'a tool retornou um erro: {error}'})
-
-                        return 'error', tool_data
-                else:
-                    print(f'tool {tool_name} não encontrada em tools_exec, fazendo nada')
-
-            return 'tool_call', tool_data
-
-        else:
-            _, extra_raw = process_generate(stripped, chunks, on_sentence=lambda text: _send_to_tts(text, output_queue, loop, punk_records=punk_records, face_queue=punk_records.face_queue))
-            raw += extra_raw
-            cleaned = (after_think + extra_raw).strip()
-            target.memory.messages.append({'role': 'assistant', 'content': raw})
-            return 'message', cleaned
-
+    mode, tool_data, raw = process_stream(chunks, on_sentence)
     target.memory.messages.append({'role': 'assistant', 'content': raw})
-    return 'message', ''
+
+    if mode != 'tool':
+        return 'message', raw.strip()
+
+    if tool_data is None:
+        return 'tool_call', None
+
+    tool_name = tool_data['name']
+    tool_args = tool_data['arguments']
+    tool_exec = target.skills.tools_exec.get(tool_name)
+
+    if not tool_exec:
+        print(f'tool {tool_name} não encontrada em tools_exec, fazendo nada')
+        return 'tool_call', tool_data
+
+    before_text = _format_tool_feedback(tool_exec['before'], tool_args)
+    _send_to_tts(before_text, output_queue, loop, punk_records=punk_records, face_queue=punk_records.face_queue)
+
+    error, result = _safe_tool_exec(tool_exec['fn'], tool_args, punk_records)
+
+    if error is None:
+        after_text = _format_tool_feedback(tool_exec['after'], tool_args, result=result)
+        _send_to_tts(after_text, output_queue, loop, punk_records=punk_records, face_queue=punk_records.face_queue)
+        reset_vegapunk(punk_records, punk_records.current_active)
+        return 'tool_call', tool_data
+
+    error_text = _format_tool_feedback(tool_exec['error'], tool_args)
+    _send_to_tts(error_text, output_queue, loop, punk_records=punk_records, face_queue=punk_records.face_queue)
+
+    target.memory.messages.append({'role': 'tool', 'content': f'error: {error}'})
+    target.memory.messages.append({'role': 'user', 'content': f'a tool retornou um erro: {error}'})
+
+    return 'error', tool_data
 
 
 async def reconsult_satellite(punk_records: PunkRecords, user_message: str, output_queue=None, loop=None):

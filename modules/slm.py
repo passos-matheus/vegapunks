@@ -46,7 +46,7 @@ def generate(messages: list, model: Llama, strean: bool = True):
 
 def process_think(raw: str):
 
-    _, think_and_rest = raw.split('<think>', 1) if '<think>' in raw else ('', raw)    
+    _, think_and_rest = raw.split('<think>', 1) if '<think>' in raw else ('', raw)
 
     think_content, after_think = think_and_rest.split('</think>', 1) if '</think>' in think_and_rest else (think_and_rest, '')
     think_content = think_content.strip()
@@ -57,63 +57,119 @@ def process_think(raw: str):
     return think_content, after_think
 
 
-# podia ser um if, mas vou deixar aqui caso eu mude a lógca mais pra frente.
-def identify_mode(first_content: str):
-    return 'tool' if first_content.startswith('<') else 'text'
+TOOL_CALL_OPEN = '<tool_call>'
+TOOL_CALL_CLOSE = '</tool_call>'
+_SENTENCE_RE = re.compile(r'.*[,\.!\?\;:\n]')
+_TOOL_CALL_RE = re.compile(r'<tool_call>\s*(.*?)\s*</tool_call>', re.DOTALL)
 
 
-
-def process_tool(initial_buffer: str, remaining_chunks):
-    extra_raw = ""
-    
-    buffer = initial_buffer
-
-    for chunk in remaining_chunks:
+def _iter_content_tokens(chunks):
+    for chunk in chunks:
         delta = chunk['choices'][0]['delta']
-        print(delta)
+        content = delta.get('content') if 'content' in delta else None
+        if content:
+            yield content
 
-        if 'content' in delta and delta['content']:
-            extra_raw += delta['content']
-            buffer += delta['content']
 
-    cleaned = buffer.strip()
-    tool_match = re.search(r'<tool_call>\s*(.*?)\s*</tool_call>', cleaned, re.DOTALL)
+def _flush_sentences(buffer, on_sentence):
+    while True:
+        match = _SENTENCE_RE.search(buffer)
+        if not match:
+            return buffer
+        on_sentence(match.group())
+        buffer = buffer[match.end():]
 
-    if tool_match:
-        tool_data = json.loads(tool_match.group(1))
+
+def _partition_at_tool_prefix(buffer):
+    i = 0
+    while True:
+        lt = buffer.find('<', i)
+        if lt < 0:
+            return buffer, ''
+        tail = buffer[lt:]
+        if TOOL_CALL_OPEN.startswith(tail[:len(TOOL_CALL_OPEN)]):
+            return buffer[:lt], tail
+        i = lt + 1
+
+
+def _extract_tool_call_json(buffer):
+    match = _TOOL_CALL_RE.search(buffer)
+    if not match:
+        return None
+    try:
+        return json.loads(match.group(1))
+    except json.JSONDecodeError as e:
+        print(f'[tool_call] json inválido: {e} | raw: {match.group(1)!r}')
+        return None
+
+
+def _drain_until_tool_close(buffer, token_iter, raw):
+    while TOOL_CALL_CLOSE not in buffer:
+        try:
+            token = next(token_iter)
+        except StopIteration:
+            break
+        raw += token
+        buffer += token
+
+    tool_data = _extract_tool_call_json(buffer)
+    if tool_data is not None:
         print(f'[tool_call]: {tool_data}')
-        return tool_data, extra_raw
+    else:
+        print(f'detectou modo tool mas não encontrou <tool_call>: {buffer.strip()}')
 
-    print(f'detectou modo tool mas não encontrou <tool_call>: {cleaned}')
-    
-    return None, extra_raw
+    return tool_data, raw
 
 
-def process_generate(initial_buffer: str, remaining_chunks, on_sentence=print):
-    extra_raw = ""
+def process_stream(chunks, on_sentence):
+    token_iter = _iter_content_tokens(chunks)
+    raw = ''
+    after_think = ''
+    think_done = False
 
-    buffer = initial_buffer
+    for token in token_iter:
+        raw += token
+        if '</think>' in raw:
+            _, after_think = process_think(raw)
+            think_done = True
+            break
 
-    for chunk in remaining_chunks:
+    if not think_done:
+        return 'message', None, raw
 
-        delta = chunk['choices'][0]['delta']
+    buffer = after_think
 
-        if 'content' in delta and delta['content']:
-            token = delta['content']
-            extra_raw += token
-            buffer += token
+    while not buffer.lstrip():
+        try:
+            token = next(token_iter)
+        except StopIteration:
+            return 'message', None, raw
+        raw += token
+        buffer += token
 
-            match = re.search(r'.*[,\.!\?\;:\n]', buffer)
+    if buffer.lstrip().startswith('<'):
+        tool_data, raw = _drain_until_tool_close(buffer, token_iter, raw)
+        return 'tool', tool_data, raw
 
-            if match:
-                on_sentence(match.group())
-                buffer = buffer[match.end():]
+    while True:
+        if TOOL_CALL_OPEN in buffer:
+            print('[warn] modelo preambulou antes de <tool_call>, executando tool mesmo assim')
+            tool_data, raw = _drain_until_tool_close(buffer, token_iter, raw)
+            return 'tool', tool_data, raw
 
-    if buffer:
+        safe, held = _partition_at_tool_prefix(buffer)
+        buffer = _flush_sentences(safe, on_sentence) + held
+
+        try:
+            token = next(token_iter)
+        except StopIteration:
+            break
+        raw += token
+        buffer += token
+
+    if buffer.strip():
         on_sentence(buffer)
-
-    full_text = initial_buffer + extra_raw
-    return full_text, extra_raw
+    return 'message', None, raw
 
 
 def desactive_adapters(ctx, name_pointer_tuple_list, adapters, scales):

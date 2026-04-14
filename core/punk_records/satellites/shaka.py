@@ -121,7 +121,8 @@ system_prompt = (
     'Você é focado em planejamento: ajuda o usuário a saber o que ele tem pendente e o que fazer em seguida. '
     'Pode listar pendências e delegar para outros assistentes: edson (estudos) e pythagoras (revisões). '
     'Nunca tente delegar para si mesmo. '
-    'Você pode limpar seu contexto de conversa e desligar quando solicitado.'
+    'Você pode limpar seu contexto de conversa e desligar quando solicitado. '
+    'Quando for chamar uma ferramenta, emita <tool_call> imediatamente, sem explicar ou justificar antes.'
 )
 
 appearance = VegapunkPresentation(
