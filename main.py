@@ -14,7 +14,7 @@ from modules.slm import create_generation_model
 from modules.tts import create_speech_synthesis_model
 from core.punk_records.satellites import vegapunks as vp_configs
 from modules.wakeword import create_wakeword_model, detect_wakeword_in_speech_segment
-from modules.workers.audio_workers import audio_consumer_worker, audio_producer_worker, pick_supported_rate
+from modules.workers.audio_workers import audio_consumer_worker, audio_producer_worker, pick_supported_rate, resolve_device_index
 from core.punk_records import start_punk_records, reconsult_satellite, activate_vegapunk
 from modules.stt import create_voice_detection_model, create_transcription_model, transcribe_speech_segment, extract_speech_segment
 
@@ -36,23 +36,28 @@ def _create_audio_resources():
     stop_flag = threading.Event()
     audio_input_queue = asyncio.Queue(maxsize=100)
     tts_output_queue = asyncio.Queue(maxsize=20)
-    input_rate = pick_supported_rate(so, is_input=True)
-    output_rate = pick_supported_rate(so, is_input=False)
-    return so, stop_flag, audio_input_queue, tts_output_queue, input_rate, output_rate
+
+    input_device_index = resolve_device_index(so, os.environ.get("AUDIO_INPUT_DEVICE"), is_input=True)
+    output_device_index = resolve_device_index(so, os.environ.get("AUDIO_OUTPUT_DEVICE"), is_input=False)
+
+    input_rate = pick_supported_rate(so, is_input=True, device_index=input_device_index)
+    output_rate = pick_supported_rate(so, is_input=False, device_index=output_device_index)
+
+    return so, stop_flag, audio_input_queue, tts_output_queue, input_rate, output_rate, input_device_index, output_device_index
 
 
-def _start_audio_consumer(so, stop_flag, audio_input_queue, loop, input_rate):
+def _start_audio_consumer(so, stop_flag, audio_input_queue, loop, input_rate, input_device_index):
     thread = threading.Thread(
         target=audio_consumer_worker,
-        args=(so, stop_flag, frames_amount, audio_input_queue, loop, input_rate),
+        args=(so, stop_flag, frames_amount, audio_input_queue, loop, input_rate, input_device_index),
     )
     thread.start()
     return thread
 
 
-def _start_audio_producer(so, stop_flag, tts_output_queue, tts_model, output_rate):
+def _start_audio_producer(so, stop_flag, tts_output_queue, tts_model, output_rate, output_device_index):
     task = asyncio.create_task(
-        audio_producer_worker(so, stop_flag, tts_output_queue, tts_model, output_rate)
+        audio_producer_worker(so, stop_flag, tts_output_queue, tts_model, output_rate, output_device_index)
     )
     return task
 
@@ -156,7 +161,7 @@ async def _pipeline_loop(
 
 async def run_punk_records():
     loop = asyncio.get_running_loop()
-    so, stop_flag, audio_input_queue, tts_output_queue, input_rate, output_rate = _create_audio_resources()
+    so, stop_flag, audio_input_queue, tts_output_queue, input_rate, output_rate, input_device_index, output_device_index = _create_audio_resources()
 
     wakeword_model, transcription_model, voice_detection_model, tts_model = _create_models()
     punk_records = _create_punk_records()
@@ -168,8 +173,8 @@ async def run_punk_records():
     send_face(face_queue, "mode", punk_records.current_active)
     send_face(face_queue, "state", "sleeping")
 
-    producer_task = _start_audio_producer(so, stop_flag, tts_output_queue, tts_model, output_rate)
-    _start_audio_consumer(so, stop_flag, audio_input_queue, loop, input_rate)
+    producer_task = _start_audio_producer(so, stop_flag, tts_output_queue, tts_model, output_rate, output_device_index)
+    _start_audio_consumer(so, stop_flag, audio_input_queue, loop, input_rate, input_device_index)
 
     try:
         await _pipeline_loop(
@@ -187,12 +192,12 @@ async def run_punk_records():
 
 async def run_punk_records_in_test_mode():
     loop = asyncio.get_running_loop()
-    so, stop_flag, audio_input_queue, tts_output_queue, input_rate, output_rate = _create_audio_resources()
+    so, stop_flag, audio_input_queue, tts_output_queue, input_rate, output_rate, input_device_index, output_device_index = _create_audio_resources()
 
     wakeword_model, transcription_model, voice_detection_model, tts_model = _create_models()
 
-    producer_task = _start_audio_producer(so, stop_flag, tts_output_queue, tts_model, output_rate)
-    _start_audio_consumer(so, stop_flag, audio_input_queue, loop, input_rate)
+    producer_task = _start_audio_producer(so, stop_flag, tts_output_queue, tts_model, output_rate, output_device_index)
+    _start_audio_consumer(so, stop_flag, audio_input_queue, loop, input_rate, input_device_index)
 
     try:
         await _pipeline_loop(
